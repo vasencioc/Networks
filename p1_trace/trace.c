@@ -64,6 +64,23 @@ struct UDP_header{
     uint16_t checksum;
 }__attribute__((packed));
 
+void TCP_print(const u_char *pkt_data){
+    struct TCP_header *tcp_head = (struct TCP_header *)pkt_data;
+    uint8_t offset = (tcp_head->offset_res_flags >> 12);
+    uint8_t flags = (tcp_head->offset_res_flags & 0xFF);
+    printf("\n\tTCP Header\n\t\tSource Port:  %u\n", tcp_head->src);
+    printf("\t\tDest Port:  %u\n", tcp_head->dest);
+    printf("\t\tSequence Number: %u\n", tcp_head->sequence);
+    printf("\t\tACK Number: %u\n", tcp_head->ack);
+    printf("\t\tData Offset (bytes): %u\n", offset);
+    (flags&2) ? printf("\t\tSYN Flag: Yes\n") : printf("\t\tSYN Flag: No\n");
+    (flags&4) ? printf("\t\tRST Flag: Yes\n") : printf("\t\tRST Flag: No\n");
+    (flags&1) ? printf("\t\tFIN Flag: Yes\n") : printf("\t\tFIN Flag: No\n");
+    (flags&16) ? printf("\t\tACK Flag: Yes\n") : printf("\t\tACK Flag: No\n");
+    printf("\t\tWindow Size: %u\n", tcp_head->window_size);
+    printf("\t\tChecksum: \n");
+}
+
 void ICMP_print(const u_char *pkt_data){
     struct ICMP_header *icmp_head = (struct ICMP_header *)pkt_data;
     switch(icmp_head->type){
@@ -99,8 +116,6 @@ void ARP_print(const u_char *pkt_data){
         }
     }
     printf("\t\tSender MAC: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->sender_hardware_addr));
-    printf("\t\tSender MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", 
-    arp_head->sender_hardware_addr, arp_head->sender_hardware_addr + 1, arp_head->sender_hardware_addr + 2, arp_head->sender_hardware_addr + 3, arp_head->sender_hardware_addr + 4, arp_head->sender_hardware_addr + 5);
     printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->sender_protocol_addr));
     printf("\t\tSender MAC: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->target_hardware_addr));
     printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->target_protocol_addr));
@@ -145,7 +160,8 @@ void IP_print(const u_char *pkt_data){
             break;
         }
         case(6):{
-            //TCP_print();
+            pkt_data += sizeof(struct IP_header);
+            TCP_print(pkt_data);
             break;
         }
         default: break;
