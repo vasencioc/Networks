@@ -5,6 +5,7 @@
 #include <pcap/pcap.h>
 #include <netinet/ether.h>
 #include <arpa/inet.h>
+#include <string.h>
 #include "checksum.h"
 
 /* Header Structures */
@@ -33,9 +34,9 @@ struct ARP_header{
     uint8_t hardware_length;
     uint8_t protocol_length;
     uint16_t operation;
-    uint32_t sender_hardware_addr;
+    uint8_t sender_hardware_addr[6];
     uint32_t sender_protocol_addr;
-    uint32_t target_hardware_addr;
+    uint8_t target_hardware_addr[6];
     uint32_t target_protocol_addr;
 }__attribute__((packed));
 
@@ -64,20 +65,26 @@ struct UDP_header{
     uint16_t checksum;
 }__attribute__((packed));
 
+void UDP_print(const u_char *pkt_data){
+    struct UDP_header *udp_head = (struct UDP_header *)pkt_data;
+    printf("\n\tUDP Header\n\t\tSource Port:  %d\n", ntohs(udp_head->src));
+    printf("\t\tDest Port:  %d\n", ntohs(udp_head->dest));
+}
+
 void TCP_print(const u_char *pkt_data){
     struct TCP_header *tcp_head = (struct TCP_header *)pkt_data;
-    uint8_t offset = (tcp_head->offset_res_flags >> 12);
+    uint8_t offset = (ntohs(tcp_head->offset_res_flags) >> 12);
     uint8_t flags = (tcp_head->offset_res_flags & 0xFF);
-    printf("\n\tTCP Header\n\t\tSource Port:  %u\n", tcp_head->src);
-    printf("\t\tDest Port:  %u\n", tcp_head->dest);
-    printf("\t\tSequence Number: %u\n", tcp_head->sequence);
-    printf("\t\tACK Number: %u\n", tcp_head->ack);
-    printf("\t\tData Offset (bytes): %u\n", offset);
+    printf("\n\tTCP Header\n\t\tSource Port:  %u\n", ntohs(tcp_head->src));
+    printf("\t\tDest Port:  %u\n", ntohs(tcp_head->dest));
+    printf("\t\tSequence Number: %u\n", ntohl(tcp_head->sequence));
+    (flags&16) ? printf("\t\tACK Number: %u\n", ntohl(tcp_head->ack)) : printf("\t\tACK Number: <not valid>\n");
+    printf("\t\tData Offset (bytes): %u\n", offset * 4);
     (flags&2) ? printf("\t\tSYN Flag: Yes\n") : printf("\t\tSYN Flag: No\n");
     (flags&4) ? printf("\t\tRST Flag: Yes\n") : printf("\t\tRST Flag: No\n");
     (flags&1) ? printf("\t\tFIN Flag: Yes\n") : printf("\t\tFIN Flag: No\n");
     (flags&16) ? printf("\t\tACK Flag: Yes\n") : printf("\t\tACK Flag: No\n");
-    printf("\t\tWindow Size: %u\n", tcp_head->window_size);
+    printf("\t\tWindow Size: %u\n", ntohs(tcp_head->window_size));
     printf("\t\tChecksum: \n");
 }
 
@@ -101,24 +108,28 @@ void ICMP_print(const u_char *pkt_data){
 
 void ARP_print(const u_char *pkt_data){
     struct ARP_header *arp_head = (struct ARP_header *)pkt_data;
-    switch(arp_head->operation){
+    struct ether_addr sender_mac, target_mac;
+    memcpy(sender_mac.ether_addr_octet, arp_head->sender_hardware_addr, 6);
+    memcpy(target_mac.ether_addr_octet, arp_head->target_hardware_addr, 6);
+    uint16_t operation = ntohs(arp_head->operation);
+    switch(operation){
         case(2):{
-            printf("\n\tARP Header\n\t\tType: Reply\n");
+            printf("\n\tARP header\n\t\tOpcode: Reply\n");
             break;
         }
         case(1):{
-            printf("\n\tARP Header\n\t\tType: Request\n");
+            printf("\n\tARP header\n\t\tOpcode: Request\n");
             break;
         }
         default:{
-            printf("\n\tARP Header\n\t\tType: Error (%u)\n", arp_head->operation);
+            printf("\n\tARP header\n\t\tType: Error (%u)\n", arp_head->operation);
             break;
         }
     }
-    printf("\t\tSender MAC: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->sender_hardware_addr));
+    printf("\t\tSender MAC: %s\n", ether_ntoa(&sender_mac));
     printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->sender_protocol_addr));
-    printf("\t\tSender MAC: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->target_hardware_addr));
-    printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->target_protocol_addr));
+    printf("\t\tTarget MAC: %s\n", ether_ntoa(&target_mac));
+    printf("\t\tTarget IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->target_protocol_addr));
 }
 
 void IP_print(const u_char *pkt_data){
@@ -153,37 +164,26 @@ void IP_print(const u_char *pkt_data){
     printf("\t\tChecksum: \n");
     printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&ip_head->src));
     printf("\t\tDest IP: %s\n", inet_ntoa(*(struct in_addr *)&ip_head->dest));
+    pkt_data += sizeof(struct IP_header);
     switch(ip_head->protocol){
-        case(1):{
-            pkt_data += sizeof(struct IP_header);
-            ICMP_print(pkt_data);
-            break;
-        }
-        case(6):{
-            pkt_data += sizeof(struct IP_header);
-            TCP_print(pkt_data);
-            break;
-        }
+        case(1): ICMP_print(pkt_data); break;
+        case(6): TCP_print(pkt_data); break;
+        case(17): UDP_print(pkt_data); break;
         default: break;
     }
 }
 
 void Ethernet_print(const u_char *pkt_data){
     struct Ethernet_header *e_head = (struct Ethernet_header *)pkt_data;
-    printf("\tEthernet Header\n\t\tDestination MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", 
-    e_head->dest[0], e_head->dest[1], e_head->dest[2], e_head->dest[3], e_head->dest[4], e_head->dest[5]);
-    printf("\t\tSource MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", 
-    e_head->src[0], e_head->src[1], e_head->src[2], e_head->src[3], e_head->src[4], e_head->src[5]);
+    struct ether_addr src_mac, dest_mac;
+    memcpy(src_mac.ether_addr_octet, e_head->src, 6);
+    memcpy(dest_mac.ether_addr_octet, e_head->dest, 6);
+    printf("\tEthernet Header\n\t\tDestination MAC: %s\n", ether_ntoa(&dest_mac));
+    printf("\t\tSource MAC: %s\n", ether_ntoa(&src_mac));
     switch(ntohs(e_head->type)){
         case(0x0800):{
             printf("\t\tType: IP\n");
             pkt_data += sizeof(struct Ethernet_header);
-            IP_print(pkt_data);
-            break;
-        }
-        case(0x86DD):{
-            printf("\t\tType: IP\n");
-            pkt_data += sizeof(struct Ethernet_header); 
             IP_print(pkt_data);
             break;
         }
@@ -193,7 +193,7 @@ void Ethernet_print(const u_char *pkt_data){
             ARP_print(pkt_data);
             break;
         }
-        default: printf("\t\tType: error\n"); break;
+        default: printf("\t\tType: unknown\n"); break;
     }
 }
 
