@@ -67,8 +67,11 @@ struct UDP_header{
 
 void UDP_print(const u_char *pkt_data){
     struct UDP_header *udp_head = (struct UDP_header *)pkt_data;
-    printf("\n\tUDP Header\n\t\tSource Port:  %d\n", ntohs(udp_head->src));
-    printf("\t\tDest Port:  %d\n", ntohs(udp_head->dest));
+    printf("\n\tUDP Header\n");
+    uint16_t source = ntohs(udp_head->src);
+    uint16_t destination = ntohs(udp_head->dest);
+    (source == 53) ? printf("\t\tSource Port:  DNS\n") : printf("\t\tSource Port:  %d\n", source);
+    (destination == 53) ? printf("\t\tDest Port:  DNS\n") : printf("\t\tDest Port:  %d\n", destination);
 }
 
 void TCP_print(const u_char *pkt_data){
