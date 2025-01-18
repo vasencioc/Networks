@@ -86,16 +86,14 @@ void UDP_print(const u_char *pkt_data){
 
 void TCP_print(const u_char *pkt_data, struct TCP_pseudoheader pseudohead){
     struct TCP_header *tcp_head = (struct TCP_header *)pkt_data;
-
     uint8_t offset = (ntohs(tcp_head->offset_res_flags) >> 12) * 4;
     uint8_t flags = (tcp_head->offset_res_flags & 0xFF);
+    int pseudo_and_tcp_len = sizeof(pseudohead) + ntohs(pseudohead.TCPlen);
 
-    //const uint8_t *tcp_payload = pkt_data + offset;
-    //uint16_t payload_len = pseudohead.TCPlen - offset;
-    // uint8_t checksum_val[pseudohead.TCPlen + sizeof(pseudohead)];
-    // memcpy(checksum_val, &pseudohead, sizeof(pseudohead));
-    // memcpy(checksum_val + sizeof(pseudohead), pkt_data, pseudohead.TCPlen);
-    //memcpy(checksum_val + sizeof(pseudohead) + offset, tcp_payload, payload_len);
+    // Build checksum array
+    uint8_t checksum_val[pseudo_and_tcp_len];
+    memcpy(checksum_val, &pseudohead, sizeof(pseudohead));
+    memcpy(checksum_val + sizeof(pseudohead), pkt_data, ntohs(pseudohead.TCPlen));
 
     printf("\n\tTCP Header\n\t\tSource Port:  %u\n", ntohs(tcp_head->src));
     printf("\t\tDest Port:  %u\n", ntohs(tcp_head->dest));
@@ -108,8 +106,8 @@ void TCP_print(const u_char *pkt_data, struct TCP_pseudoheader pseudohead){
     (flags&16) ? printf("\t\tACK Flag: Yes\n") : printf("\t\tACK Flag: No\n");
     printf("\t\tWindow Size: %u\n", ntohs(tcp_head->window_size));
 
-    //uint16_t check = in_cksum((unsigned short *)checksum_val, sizeof(checksum_val));
-    //(check == 0) ? printf("\t\tChecksum: Correct (0x%04x)\n", ntohs(tcp_head->checksum)) : printf("\t\tChecksum: Incorrect (0x%04x)\n", ntohs(tcp_head->checksum));
+    uint16_t check = in_cksum((unsigned short *)checksum_val, pseudo_and_tcp_len);
+    (check == 0) ? printf("\t\tChecksum: Correct (0x%04x)\n", ntohs(tcp_head->checksum)) : printf("\t\tChecksum: Incorrect (0x%04x)\n", ntohs(tcp_head->checksum));
 }
 
 
@@ -167,7 +165,7 @@ void IP_print(const u_char *pkt_data){
     tcp_pseudohead.protocol = 6;
     uint8_t version = ip_head->version_IHL >> 4;
     uint8_t ihl = (ip_head->version_IHL & 0x0F) * 4;
-    tcp_pseudohead.TCPlen = ntohs(ip_head->length) - ihl;
+    tcp_pseudohead.TCPlen = htons(ntohs(ip_head->length) - ihl);
     uint8_t diffserv = ip_head->TOS >> 2;
     uint8_t ecn = ip_head->TOS & 0x03;
     uint16_t check = in_cksum((unsigned short *)ip_head, ihl);
@@ -177,22 +175,10 @@ void IP_print(const u_char *pkt_data){
     printf("\t\t   ECN bits: %u\n", ecn);
     printf("\t\tTTL: %u\n", ip_head->ttl);
     switch(ip_head->protocol){
-        case(1):{
-            printf("\t\tProtocol: ICMP\n");
-            break;
-        }
-        case(6):{
-            printf("\t\tProtocol: TCP\n");
-            break;
-        }
-        case(17):{
-            printf("\t\tProtocol: UDP\n");
-            break;
-        }
-        default:{
-            printf("\t\tProtocol: Unknown\n");
-            break;
-        }
+        case(1): printf("\t\tProtocol: ICMP\n"); break;
+        case(6): printf("\t\tProtocol: TCP\n"); break;
+        case(17): printf("\t\tProtocol: UDP\n"); break;
+        default: printf("\t\tProtocol: Unknown\n"); break;
     }
     (check == 0) ? printf("\t\tChecksum: Correct (0x%x)\n", ntohs(ip_head->checksum)) : printf("\t\tChecksum: Incorrect (0x%x)\n", ntohs(ip_head->checksum));
     printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&ip_head->src));
@@ -243,7 +229,7 @@ int main(int argc, char* argv[]){
         return 2;
     }
     while(pcap_next_ex(p, &pkt_header, &pkt_data) == 1){
-        pkt_length = pktheader->len;
+        pkt_length = pkt_header->len;
         printf("Packet Number: %d  Packet Len: %u\n\n", packet_num, pkt_length);
         Ethernet_print(pkt_data);
         packet_num++;
