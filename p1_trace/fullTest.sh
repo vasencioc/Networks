@@ -11,7 +11,7 @@ for pcap_file in "$directory"/*.pcap; do
     # Check if the .pcap file exists
     if [[ -f "$pcap_file" ]]; then
         # Derive the name of the .pcap.out file
-        out_file="${pcap_file%.pcap}.pcap.out"
+        out_file="${pcap_file%.pcap}.out"
 
         # Check if the corresponding .pcap.out file exists
         if [[ -f "$out_file" ]]; then

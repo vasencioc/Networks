@@ -86,8 +86,8 @@ void UDP_print(const u_char *pkt_data){
 
 void TCP_print(const u_char *pkt_data, struct TCP_pseudoheader pseudohead){
     struct TCP_header *tcp_head = (struct TCP_header *)pkt_data;
-    uint8_t offset = (ntohs(tcp_head->offset_res_flags) >> 12) * 4;
     uint8_t flags = (tcp_head->offset_res_flags & 0xFF);
+    uint8_t offset = (ntohs(tcp_head->offset_res_flags) >> 12) * 4;
     int pseudo_and_tcp_len = sizeof(pseudohead) + ntohs(pseudohead.TCPlen);
 
     // Build checksum array
@@ -153,7 +153,7 @@ void ARP_print(const u_char *pkt_data){
     printf("\t\tSender MAC: %s\n", ether_ntoa(&sender_mac));
     printf("\t\tSender IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->sender_protocol_addr));
     printf("\t\tTarget MAC: %s\n", ether_ntoa(&target_mac));
-    printf("\t\tTarget IP: %s\n", inet_ntoa(*(struct in_addr *)&arp_head->target_protocol_addr));
+    printf("\t\tTarget IP: %s\n\n", inet_ntoa(*(struct in_addr *)&arp_head->target_protocol_addr));
 }
 
 void IP_print(const u_char *pkt_data){
@@ -197,7 +197,7 @@ void Ethernet_print(const u_char *pkt_data){
     struct ether_addr src_mac, dest_mac;
     memcpy(src_mac.ether_addr_octet, e_head->src, 6);
     memcpy(dest_mac.ether_addr_octet, e_head->dest, 6);
-    printf("\tEthernet Header\n\t\tDestination MAC: %s\n", ether_ntoa(&dest_mac));
+    printf("\tEthernet Header\n\t\tDest MAC: %s\n", ether_ntoa(&dest_mac));
     printf("\t\tSource MAC: %s\n", ether_ntoa(&src_mac));
     switch(ntohs(e_head->type)){
         case(0x0800):{
@@ -230,7 +230,7 @@ int main(int argc, char* argv[]){
     }
     while(pcap_next_ex(p, &pkt_header, &pkt_data) == 1){
         pkt_length = pkt_header->len;
-        printf("Packet Number: %d  Packet Len: %u\n\n", packet_num, pkt_length);
+        printf("\nPacket number: %d  Packet Len: %u\n\n", packet_num, pkt_length);
         Ethernet_print(pkt_data);
         packet_num++;
     }
