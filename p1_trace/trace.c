@@ -74,6 +74,26 @@ struct UDP_header{
     uint16_t checksum;
 }__attribute__((packed));
 
+/*Helper function*/
+
+/**
+ * Prints port number types
+ * @param port_num TCP/UDP source and destination port number
+ * @return void
+ */
+void print_port(uint16_t port_num){
+    switch(port_num){
+        case(53): printf("DNS\n"); break;
+        case(80): printf("HTTP\n"); break;
+        case(23): printf("TELNET\n"); break;
+        case(21): printf("FTP_CONTROL\n"); break;
+        case(20): printf("FTP_DATA\n"); break;
+        case(110): printf("POP3\n"); break;
+        case(25): printf("SMTP\n"); break;
+        default: printf("%u\n", port_num); break;
+    }
+}
+
 /*Header info printing functions*/
 
 /**
@@ -90,8 +110,10 @@ void UDP_print(const u_char *pkt_data){
     uint16_t source = ntohs(udp_head->src);
     uint16_t destination = ntohs(udp_head->dest);
     //check if address indicates DNS
-    (source == 53) ? printf("\t\tSource Port:  DNS\n") : printf("\t\tSource Port:  %d\n", source);
-    (destination == 53) ? printf("\t\tDest Port:  DNS\n") : printf("\t\tDest Port:  %d\n", destination);
+    printf("\t\tSource Port:  ");
+    print_port(source);
+    printf("\t\tDest Port:  ");
+    print_port(destination);
 }
 
 /**
@@ -117,8 +139,9 @@ void TCP_print(const u_char *pkt_data, struct TCP_pseudoheader pseudohead){
     
     //print TCP header information
     printf("\n\tTCP Header\n\t\tSource Port:  ");
-    (ntohs(tcp_head->src) == 80) ? printf("HTTP\n") : printf("%u\n", ntohs(tcp_head->src));
-    (ntohs(tcp_head->dest) == 80) ? printf("\t\tDest Port:  HTTP\n") : printf("\t\tDest Port:  %u\n", ntohs(tcp_head->dest));
+    print_port(ntohs(tcp_head->src));
+    printf("\t\tDest Port:  ");
+    print_port(ntohs(tcp_head->dest));
     printf("\t\tSequence Number: %u\n", ntohl(tcp_head->sequence));
     printf("\t\tACK Number: %u\n", ntohl(tcp_head->ack));
     printf("\t\tData Offset (bytes): %u\n", offset);
