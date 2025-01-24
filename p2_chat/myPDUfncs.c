@@ -5,8 +5,9 @@
  #include <string.h>
  #include <arpa/inet.h> 
  #include <errno.h>
-
-#include "myPDUfncs.h"
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include "myPDUfncs.h"
 
 /**
  *  Create the PDU and send the PDU 
@@ -43,7 +44,7 @@ int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
         perror("recv call");
         exit(-1);
     }
-    int16_t PDUlenHostOrder = ntohs(dataLenNetOrder);
+    int16_t PDUlenHostOrder = ntohs(PDUlenNetOrder);
     if(bufferSize < PDUlenHostOrder ){
         perror("PDU buffer");
         exit(-1);
