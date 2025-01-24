@@ -22,7 +22,7 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     uint8_t PDU[lengthOfPDU];
     uint16_t lenPDUNetOrder = htons(lengthOfPDU);
     memcpy(PDU, &lenPDUNetOrder, 2);
-    memcpy(PDU, dataBuffer, lengthOfData);
+    memcpy(PDU + 2, dataBuffer, lengthOfData);
     if((bytesSent = send(clientSocket, PDU, lengthOfPDU, 0)) < 0){
         perror("send call");
         exit(-1);
