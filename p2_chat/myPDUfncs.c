@@ -2,6 +2,9 @@
 // Writen by Victoria Asencio-Clemens, Jan. 2025
 //
 // PDU creation and send and receive functions
+ #include <string.h>
+ #include <arpa/inet.h> 
+ #include <errno.h>
 
 #include "myPDUfncs.h"
 
@@ -13,11 +16,13 @@
  * @return data bytes sent
  */
 int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
+    int bytesSent = 0;
     uint16_t lengthOfPDU = lengthOfData + 2;
     uint8_t PDU[lengthOfPDU];
-    memcpy(PDU, htons(lengthOfPDU), 2);
+    uint16_t lenPDUNetOrder = htons(lengthOfPDU);
+    memcpy(PDU, &lenPDUNetOrder, 2);
     memcpy(PDU, dataBuffer, lengthOfData);
-    if((bytesSent = send(clientSocket, PDU, lengthOfPDU)) < 0){
+    if((bytesSent = send(clientSocket, PDU, lengthOfPDU, 0)) < 0){
         perror("send call");
         exit(-1);
     }
