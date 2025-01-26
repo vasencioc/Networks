@@ -23,10 +23,11 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     uint16_t lenPDUNetOrder = htons(lengthOfPDU);
     memcpy(PDU, &lenPDUNetOrder, 2);
     memcpy(PDU + 2, dataBuffer, lengthOfData);
-    if((bytesSent = send(clientSocket, PDU, lengthOfPDU, 0)) < 0){
-        perror("send call");
-        exit(-1);
-    }
+    bytesSent = send(clientSocket, PDU, lengthOfPDU, 0);
+    // if((bytesSent = send(clientSocket, PDU, lengthOfPDU, 0)) < 0){
+    //     perror("send call");
+    //     exit(-1);
+    // }
     return bytesSent;
 }
 
@@ -42,18 +43,18 @@ int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
     if (PDUlenNetOrder <= 0)
     {
         perror("recv call");
-        exit(-1);
+        exit(1);
     }
     int16_t PDUlenHostOrder = ntohs(PDUlenNetOrder);
     if(bufferSize < PDUlenHostOrder ){
         perror("PDU buffer");
-        exit(-1);
+        exit(1);
     }
     int bytesReceived = recv(socketNumber, dataBuffer, PDUlenHostOrder - 2, MSG_WAITALL);
-    if (bytesReceived < 0)
-    {
-        perror("recv call");
-        exit(-1);
-    }
+    // if (bytesReceived < 0)
+    // {
+    //     perror("recv call");
+    //     exit(-1);
+    // }
     return bytesReceived ;
 }

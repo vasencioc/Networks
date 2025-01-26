@@ -41,15 +41,17 @@ int main(int argc, char *argv[])
 	
 	//create the server socket
 	mainServerSocket = tcpServerSetup(portNumber);
-
-	// wait for client to connect
-	clientSocket = tcpAccept(mainServerSocket, DEBUG_FLAG);
-
-	recvFromClient(clientSocket);
 	
+	while(1){
+		// wait for client to connect
+		clientSocket = tcpAccept(mainServerSocket, DEBUG_FLAG);
+		printf("getting here\n");
+		recvFromClient(clientSocket);
+		printf("getting here\n");
+	}
 	/* close the sockets */
-	close(clientSocket);
-	close(mainServerSocket);
+	//close(clientSocket);
+	//close(mainServerSocket);
 
 	
 	return 0;
@@ -57,16 +59,17 @@ int main(int argc, char *argv[])
 
 void recvFromClient(int clientSocket)
 {
+	printf("getting here\n");
 	uint8_t dataBuffer[MAXBUF];
 	int messageLen = 0;
 	
 	//now get the data from the client_socket
-	if ((messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF)) < 0)
+	if((messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF)) < 0)
 	{
 		perror("recv call");
 		exit(-1);
 	}
-
+	printf
 	if (messageLen > 0)
 	{
 		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer);

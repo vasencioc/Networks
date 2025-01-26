@@ -7,13 +7,13 @@ LIBS =
 
 OBJS = networks.o gethostbyname.o pollLib.o safeUtil.o myPDUfncs.o
 
-all:   cclient server
+all:   cclient2 server2
 
-cclient: cclient.c $(OBJS)
-	$(CC) $(CFLAGS) -o cclient cclient.c  $(OBJS) $(LIBS)
+cclient2: cclient2.c $(OBJS)
+	$(CC) $(CFLAGS) -o cclient2 cclient2.c  $(OBJS) $(LIBS)
 
-server: server.c $(OBJS)
-	$(CC) $(CFLAGS) -o server server.c $(OBJS) $(LIBS)
+server2: server2.c $(OBJS)
+	$(CC) $(CFLAGS) -o server2 server2.c $(OBJS) $(LIBS)
 
 .c.o:
 	gcc -c $(CFLAGS) $< -o $@ $(LIBS)
@@ -22,7 +22,7 @@ cleano:
 	rm -f *.o
 
 clean:
-	rm -f server cclient *.o
+	rm -f server2 cclient2 *.o
 
 
 
