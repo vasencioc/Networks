@@ -43,25 +43,27 @@ int main(int argc, char * argv[])
 
 	/* set up the TCP Client socket  */
 	socketNum = tcpClientSetup(argv[1], argv[2], DEBUG_FLAG);
-	setupPollSet();
-    addToPollSet(socketNum);
-    addToPollSet(STDIN_FILENO);
-	while(1){
-    	clientControl(socketNum);
-	}
+
+    clientControl(socketNum);
+
 	close(socketNum);
 	
 	return 0;
 }
 
 void clientControl(int socketNum){
-	int readySocket = pollCall(-1);
-	printf("getting here\n");
-	if(readySocket == socketNum) processMsgFromServer(readySocket);
-	else if(readySocket == STDIN_FILENO) processStdin(socketNum);
-	else{
-		perror("poll timeout");
-		exit(1);
+	setupPollSet();
+    addToPollSet(socketNum);
+    addToPollSet(STDIN_FILENO);
+	int readySocket;
+	while(1){
+		readySocket = pollCall(-1);
+		if(readySocket == socketNum) processMsgFromServer(readySocket);
+		else if(readySocket == STDIN_FILENO) processStdin(socketNum);
+		else{
+			perror("poll timeout");
+			exit(1);
+		}
 	}
 }
 
@@ -72,7 +74,7 @@ void processMsgFromServer(int socketNum){
 	
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
-		printf("Message received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer);
+		printf("Message received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
 	}
 	else
 	{

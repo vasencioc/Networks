@@ -9,6 +9,7 @@
  #include <stdlib.h>
  #include "myPDUfncs.h"
  #include "networks.h"
+ #include "safeUtil.h"
 
 /**
  *  Create the PDU and send the PDU 
@@ -25,10 +26,6 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     memcpy(PDU, &lenPDUNetOrder, 2);
     memcpy(PDU + 2, dataBuffer, lengthOfData);
     bytesSent = send(clientSocket, PDU, lengthOfPDU, 0);
-    // if((bytesSent = send(clientSocket, PDU, lengthOfPDU, 0)) < 0){
-    //     perror("send call");
-    //     exit(-1);
-    // }
     return bytesSent;
 }
 
@@ -40,25 +37,20 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
  * @return data bytes received
  */
 int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
-    printf("we here mfers pull up\n");
-    int16_t PDUlenNetOrder = recv(socketNumber, dataBuffer, 2, 0);
-    printf("Size %d", PDUlenNetOrder);
-    if (PDUlenNetOrder <= 0)
+    int16_t PDUlenNetOrder, PDUlenHostOrder;
+    int bytesReceived = safeRecv(socketNumber, dataBuffer, 2, MSG_WAITALL);
+    if (bytesReceived == 0)
     {
-        perror("recv call");
-        exit(1);
+        printf("Client has closed their connection\n");
+        return bytesReceived;
     }
-    
-    int16_t PDUlenHostOrder = ntohs(PDUlenNetOrder);
-    if(bufferSize < PDUlenHostOrder ) {
-        perror("PDU buffer");
-        exit(1);
+    memcpy(&PDUlenNetOrder, dataBuffer, 2);
+    PDUlenHostOrder = ntohs(PDUlenNetOrder);
+    if (bufferSize < PDUlenHostOrder) {                //Exit if buffer is not large enough to receive PDU
+        perror("Buffer size < PDU length");
+        return -1;
     }
-    int bytesReceived = recv(socketNumber, dataBuffer, PDUlenHostOrder - 2, MSG_WAITALL);
-    // if (bytesReceived < 0)
-    // {
-    //     perror("recv call");
-    //     exit(-1);
-    // }
+
+    bytesReceived = recv(socketNumber, dataBuffer + 2, PDUlenHostOrder - 2, MSG_WAITALL);
     return bytesReceived ;
 }

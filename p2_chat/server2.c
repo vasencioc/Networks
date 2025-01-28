@@ -44,11 +44,8 @@ int main(int argc, char *argv[])
 	
 	//create the server socket
 	mainServerSocket = tcpServerSetup(portNumber);
-	setupPollSet();
-	addToPollSet(mainServerSocket);
-	while(1){
-		serverControl(mainServerSocket);
-	}
+    //manage server communication
+	serverControl(mainServerSocket);
 	/* close the sockets */
 	close(mainServerSocket);
 
@@ -56,14 +53,18 @@ int main(int argc, char *argv[])
 }
 
 void serverControl(int mainServerSocket){
-    int readySocket = pollCall(-1);
-    if(readySocket == mainServerSocket){ 
-		addNewSocket(readySocket);
-    }else if(readySocket < 0){
-        perror("poll timeout");
-        exit(1);
-    }
-    else{processClient(readySocket);}
+	setupPollSet();
+	addToPollSet(mainServerSocket);
+	while(1){
+		int readySocket = pollCall(-1);
+		if(readySocket == mainServerSocket){ 
+			addNewSocket(readySocket);
+		}else if(readySocket < 0){
+			perror("poll timeout");
+			exit(1);
+		}
+		else if (readySocket > mainServerSocket) {processClient(readySocket);}
+	}
 }
 
 void addNewSocket(int readySocket){
@@ -73,31 +74,31 @@ void addNewSocket(int readySocket){
 
 void processClient(int clientSocket){
 	int messageLen = 0;
-    printf("getting here guys\n");
     uint8_t dataBuffer[MAXBUF];
 	//now get the data from the client_socket
-	printf("getting here guys still\n");
     messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF);
-	printf("%d\n", messageLen);
 	if(messageLen > 0){
-		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer);
-        // uint8_t repeatMSG[messageLen];
-        // memcpy(repeatMSG, dataBuffer, messageLen);
-        // int sent = sendPDU(clientSocket, repeatMSG, messageLen);
-        // if (sent > 0)
-        // {
-        //     printf("Amount of data sent is: %d\n", sent);
-        // } 
-        // else {
-        //     printf("Client has terminated\n");
-        //     exit(1);
-        // }
+		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
+		//Still have to close here????
+
+        uint8_t repeatMSG[messageLen];
+        memcpy(&repeatMSG, dataBuffer + 2, messageLen);
+        int sent = sendPDU(clientSocket, repeatMSG, messageLen);
+        if (sent > 0)
+        {
+            printf("Amount of data sent is: %d\n", sent);
+        } 
+        else {
+            printf("Client has terminated\n");
+            exit(1);
+        }
 	}
 	else
 	{
         printf("Connection closed by other side\n");
         close(clientSocket);
         removeFromPollSet(clientSocket);
+		exit(-1);
         //remove socket from handle table in P2
 	}
 }
