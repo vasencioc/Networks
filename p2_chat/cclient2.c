@@ -43,32 +43,32 @@ int main(int argc, char * argv[])
 
 	/* set up the TCP Client socket  */
 	socketNum = tcpClientSetup(argv[1], argv[2], DEBUG_FLAG);
-	
-    clientControl(socketNum);
-
+	setupPollSet();
+    addToPollSet(socketNum);
+    addToPollSet(STDIN_FILENO);
+	while(1){
+    	clientControl(socketNum);
+	}
 	close(socketNum);
 	
 	return 0;
 }
 
 void clientControl(int socketNum){
-    setupPollSet();
-    addToPollSet(socketNum);
-    addToPollSet(STDIN_FILENO);
-    while(1){
-        int readySocket = pollCall(-1);
-        if(readySocket == socketNum) processMsgFromServer(readySocket);
-        else if(readySocket == STDIN_FILENO) processStdin(socketNum);
-        else{
-            perror("poll timeout");
-            exit(1);
-        }
-    }
+	int readySocket = pollCall(-1);
+	printf("getting here\n");
+	if(readySocket == socketNum) processMsgFromServer(readySocket);
+	else if(readySocket == STDIN_FILENO) processStdin(socketNum);
+	else{
+		perror("poll timeout");
+		exit(1);
+	}
 }
 
 void processMsgFromServer(int socketNum){
     uint8_t dataBuffer[MAXBUF];
 	int messageLen = 0;
+
 	
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){

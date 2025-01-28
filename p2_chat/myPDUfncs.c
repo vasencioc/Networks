@@ -8,6 +8,7 @@
  #include <stdio.h>
  #include <stdlib.h>
  #include "myPDUfncs.h"
+ #include "networks.h"
 
 /**
  *  Create the PDU and send the PDU 
@@ -39,14 +40,17 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
  * @return data bytes received
  */
 int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
-    int16_t PDUlenNetOrder = recv(socketNumber, dataBuffer, 2, MSG_WAITALL);
+    printf("we here mfers pull up\n");
+    int16_t PDUlenNetOrder = recv(socketNumber, dataBuffer, 2, 0);
+    printf("Size %d", PDUlenNetOrder);
     if (PDUlenNetOrder <= 0)
     {
         perror("recv call");
         exit(1);
     }
+    
     int16_t PDUlenHostOrder = ntohs(PDUlenNetOrder);
-    if(bufferSize < PDUlenHostOrder ){
+    if(bufferSize < PDUlenHostOrder ) {
         perror("PDU buffer");
         exit(1);
     }

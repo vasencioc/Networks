@@ -44,23 +44,22 @@ int main(int argc, char *argv[])
 	
 	//create the server socket
 	mainServerSocket = tcpServerSetup(portNumber);
+	setupPollSet();
+	addToPollSet(mainServerSocket);
 	while(1){
-	    serverControl(mainServerSocket);
-    }
+		serverControl(mainServerSocket);
+	}
 	/* close the sockets */
-	//close(clientSocket);
-	//close(mainServerSocket);
+	close(mainServerSocket);
 
-	
 	return 0;
 }
 
 void serverControl(int mainServerSocket){
-    setupPollSet();
-    addToPollSet(mainServerSocket);
     int readySocket = pollCall(-1);
-    if(readySocket == mainServerSocket) addNewSocket(readySocket);
-    else if(readySocket < 0){
+    if(readySocket == mainServerSocket){ 
+		addNewSocket(readySocket);
+    }else if(readySocket < 0){
         perror("poll timeout");
         exit(1);
     }
@@ -73,11 +72,13 @@ void addNewSocket(int readySocket){
 }
 
 void processClient(int clientSocket){
-    printf("getting here\n");
+	int messageLen = 0;
+    printf("getting here guys\n");
     uint8_t dataBuffer[MAXBUF];
 	//now get the data from the client_socket
-    int messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF);
-
+	printf("getting here guys still\n");
+    messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF);
+	printf("%d\n", messageLen);
 	if(messageLen > 0){
 		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer);
         // uint8_t repeatMSG[messageLen];
