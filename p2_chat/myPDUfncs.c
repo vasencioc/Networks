@@ -20,13 +20,16 @@
  */
 int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     int bytesSent = 0;
+    //calculate PDU length and make big enough PDU buffer
     uint16_t lengthOfPDU = lengthOfData + 2;
     uint8_t PDU[lengthOfPDU];
+    //build PDU
     uint16_t lenPDUNetOrder = htons(lengthOfPDU);
     memcpy(PDU, &lenPDUNetOrder, 2);
     memcpy(PDU + 2, dataBuffer, lengthOfData);
+    //send PDU
     bytesSent = send(clientSocket, PDU, lengthOfPDU, 0);
-    return bytesSent;
+    return bytesSent; //return num bytes sent (length of PDU)
 }
 
 /**
@@ -38,19 +41,20 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
  */
 int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
     int16_t PDUlenNetOrder, PDUlenHostOrder;
+    //get message length
     int bytesReceived = safeRecv(socketNumber, dataBuffer, 2, MSG_WAITALL);
-    if (bytesReceived == 0)
+    if (bytesReceived == 0) //check for closed connection
     {
-        printf("Client has closed their connection\n");
         return bytesReceived;
     }
     memcpy(&PDUlenNetOrder, dataBuffer, 2);
     PDUlenHostOrder = ntohs(PDUlenNetOrder);
-    if (bufferSize < PDUlenHostOrder) {                //Exit if buffer is not large enough to receive PDU
-        perror("Buffer size < PDU length");
-        return -1;
+    //get message
+    if (bufferSize < PDUlenHostOrder) {  //Exit if buffer is not large enough to receive PDU
+        printf("Buffer Error\n");
+        exit(-1);
     }
-
     bytesReceived = recv(socketNumber, dataBuffer + 2, PDUlenHostOrder - 2, MSG_WAITALL);
+    //return message length (== 0 if connection closed)
     return bytesReceived ;
 }
