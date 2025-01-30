@@ -18,10 +18,20 @@
 #include "networks.h"
 #include "safeUtil.h"
 #include "myPDUfncs.h"
+#include "HandleTable.h"
 
 #define MAXBUF 1024
 #define DEBUG_FLAG 1
+#define CHATHEADER_SIZE 3
+#define PDULEN_SIZE 2
+#define FLAG_SIZE 1
 
+#define FLAG1 1
+#define FLAG2 2
+#define FLAG3 3
+
+void serverClosed(int socket);
+void login(char * handle, int socketNum);
 void clientControl(int socketNum);
 void processMsgFromServer(int socketNum);
 void processStdin(int socketNum);
@@ -34,21 +44,44 @@ int main(int argc, char * argv[])
 	checkArgs(argc, argv);
 
 	/* set up the TCP Client socket  */
-	socketNum = tcpClientSetup(argv[1], argv[2], DEBUG_FLAG);
-    
+	socketNum = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
+    login(argv[1], socketNum);
 	clientControl(socketNum);
 	close(socketNum);
 	return 0;
 }
 
-// void clientLogin(int socketNum){
+void serverClosed(int socket){
+	close(socket);
+    removeFromPollSet(socket);
+	printf("\nServer has terminated\n");
+    exit(1);
+}
 
-// }
+void login(char * handle, int socketNum){
+	uint8_t handleLen = strlen(handle) + 1; //add one for null
+	int dataLen = FLAG_SIZE + handleLen + 1; //add one for handleLen field
+	uint8_t *loginMessage = (uint8_t *)malloc(dataLen); //data buffer
+	uint8_t flag1 = FLAG1;
+	memcpy(loginMessage, &flag1, FLAG_SIZE); //add flag to PDU
+	memcpy(loginMessage + FLAG_SIZE, &handleLen, 1);
+	memcpy(loginMessage + FLAG_SIZE + 1, handle, handleLen);
 
-void clientControl(int socketNum){
+	int sent = sendPDU(socketNum, loginMessage, dataLen);
+	if(sent <= 0) serverClosed(socketNum);
+
 	//polling setup
 	setupPollSet();
     addToPollSet(socketNum);
+	
+	//wait to receive server response
+	int readySocket;
+	while(readySocket != socketNum) readySocket = pollCall(-1); //poll until a socket is ready
+	processMsgFromServer(readySocket);
+}
+
+void clientControl(int socketNum){
+	//add stdin to pollset for client input
     addToPollSet(STDIN_FILENO);
 	int readySocket;
 	while(1){
@@ -71,15 +104,18 @@ void processMsgFromServer(int socketNum){
 
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
-		printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
+		//printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
+		uint8_t flag = dataBuffer[2];
+		switch(flag) {
+			case(FLAG2): printf("Login Successful\n"); break;
+			case(FLAG3): printf("Handle Already Exists\n"); exit(-1);
+			default: break;
+		}
 	}
 	//clean up if connection closed
 	else{
-        close(socketNum);
-        removeFromPollSet(socketNum);
-        //remove socket from handle table in P2
-		printf("\nServer has terminated\n");
-        exit(1);
+        serverClosed(socketNum);
+        
 	}
 }
 
@@ -134,10 +170,10 @@ int readFromStdin(uint8_t * buffer)
 void checkArgs(int argc, char * argv[])
 {
 	/* check command line arguments  */
-	if (argc != 3) //4
+	if (argc != 4)
 	{
-		//printf("usage: %s handle-name host-name port-number \n", argv[0]);
-		printf("usage: %s host-name port-number \n", argv[0]);
+		printf("usage: %s handle-name host-name port-number \n", argv[0]);
+		//printf("usage: %s host-name port-number \n", argv[0]);
 		exit(1);
 	}
 }

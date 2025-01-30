@@ -22,10 +22,20 @@
 
 #define MAXBUF 1024
 #define DEBUG_FLAG 1
+#define CHATHEADER_SIZE 3
+#define PDULEN_SIZE 2
+#define FLAG_SIZE 1
 
+#define FLAG1 1
+#define FLAG2 2
+#define FLAG3 3
+
+void clientClosed(int socket);
+void sendFlag(int socket, uint8_t flag);
+void clientLogin(int clientSocket, HandleTable *table, uint8_t * dataBuffer);
 void serverControl(int mainServerSocket);
 void addNewSocket(int readySocket);
-void processClient(int clientSocket);
+void processClient(int clientSocket, HandleTable *table);
 int checkArgs(int argc, char *argv[]);
 
 int main(int argc, char *argv[])
@@ -36,7 +46,6 @@ int main(int argc, char *argv[])
 	
 	//create the server socket
 	mainServerSocket = tcpServerSetup(portNumber);
-    HandleTable handleTable = createtable();
 	//manage server communication
 	serverControl(mainServerSocket);
 	/* close the sockets */
@@ -44,10 +53,44 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+void clientClosed(int socket){
+	printf("Client on socket %d has terminated\n", socket);
+    close(socket);
+    removeFromPollSet(socket);
+}
+
+void sendFlag(int socket, uint8_t flag){
+	uint8_t response[FLAG_SIZE];
+	response[0] = flag;
+	int sent = sendPDU(socket, response, FLAG_SIZE);
+	if(sent <= 0) clientClosed(socket);
+}
+
+void clientLogin(int clientSocket, HandleTable *table, uint8_t * dataBuffer){
+    uint8_t handleLen = dataBuffer[0];
+	uint8_t *handle = (uint8_t *)malloc(handleLen);
+	memcpy(handle, dataBuffer + 1, handleLen);
+	if(getSocket(table, handle) != FAILURE) {
+		free(handle);
+		sendFlag(clientSocket, FLAG3);
+	} else if(addHandle(table, handle, clientSocket) == FAILURE){
+		free(handle);
+		printf("Can't Overwrite Handle\n");
+		sendFlag(clientSocket, FLAG3);
+	} else sendFlag(clientSocket, FLAG2);
+}
+
 void serverControl(int mainServerSocket){
+	//create handle table
+	HandleTable handleTable = createTable();
+	if(!handleTable.arr){
+		printf("Error creating handle table\n");
+		exit(-1);
+	}
 	//polling set setup
 	setupPollSet();
 	addToPollSet(mainServerSocket);
+	//control loop
 	while(1){
 		//poll until a socket is ready
 		int readySocket = pollCall(-1);
@@ -57,17 +100,18 @@ void serverControl(int mainServerSocket){
 			perror("poll timeout");
 			exit(1);
 		}
-		else if (readySocket > mainServerSocket) {processClient(readySocket);}
+		else if (readySocket > mainServerSocket) {processClient(readySocket, &handleTable);}
 	}
 }
 
 void addNewSocket(int readySocket){
 	//accept client and add to pollset
     int newSocket = tcpAccept(readySocket, DEBUG_FLAG);
+	//if(clientLogin(newSocket) == FAILURE)
     addToPollSet(newSocket);
 }
 
-void processClient(int clientSocket){
+void processClient(int clientSocket, HandleTable *table){
 	int messageLen = 0;
     uint8_t dataBuffer[MAXBUF];
 	//now get the data from the client_socket
@@ -75,28 +119,16 @@ void processClient(int clientSocket){
 	//check if connection was closed or error
 	if(messageLen > 0){
 		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
-		
-		//Echo message received for testing purposes
-        uint8_t repeatMSG[messageLen];
-        memcpy(&repeatMSG, dataBuffer + 2, messageLen);
-        int sent = sendPDU(clientSocket, repeatMSG, messageLen);
-        if (sent > 0)
-        {
-            printf("Amount of data sent is: %d\n", sent);
-        } 
-        else {
-			printf("Client on socket %d has terminated\n", clientSocket);
-        	close(clientSocket);
-        	removeFromPollSet(clientSocket);
-			//remove socket from handle table in P2
-        }
+		uint8_t flag = dataBuffer[2];
+		switch(flag) {
+			case(FLAG1): clientLogin(clientSocket, table, dataBuffer + 1); break;
+			default: break;
+		}
 	}
 	//clean up
 	else {
-		printf("Client on socket %d has terminated\n", clientSocket);
-        close(clientSocket);
-        removeFromPollSet(clientSocket);
-        //remove socket from handle table in P2
+		clientClosed(clientSocket);
+		if(getHandle(table, clientSocket)) removeHandle(table, clientSocket);
 	}
 }
 
