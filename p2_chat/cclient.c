@@ -41,6 +41,10 @@ int main(int argc, char * argv[])
 	return 0;
 }
 
+// void clientLogin(int socketNum){
+
+// }
+
 void clientControl(int socketNum){
 	//polling setup
 	setupPollSet();
@@ -48,6 +52,8 @@ void clientControl(int socketNum){
     addToPollSet(STDIN_FILENO);
 	int readySocket;
 	while(1){
+		printf("Enter data: ");
+		fflush(stdout);
 		readySocket = pollCall(-1); //poll until a socket is ready
 		if(readySocket == socketNum) processMsgFromServer(readySocket);
 		else if(readySocket == STDIN_FILENO) processStdin(socketNum);
@@ -65,22 +71,22 @@ void processMsgFromServer(int socketNum){
 
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
-		printf("Message received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
+		printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
 	}
 	//clean up if connection closed
 	else{
         close(socketNum);
         removeFromPollSet(socketNum);
         //remove socket from handle table in P2
-		printf("Server has terminated\n");
+		printf("\nServer has terminated\n");
         exit(1);
 	}
 }
 
 void processStdin(int socketNum){
-    uint8_t sendBuf[MAXBUF];   //data buffer
-	int sendLen = 0;        //amount of data to send
-	int sent = 0;           //actual amount of data sent
+    uint8_t sendBuf[MAXBUF]; //data buffer
+	int sendLen = 0;         //amount of data to send
+	int sent = 0;            //actual amount of data sent
 	//get data from stdin
 	sendLen = readFromStdin(sendBuf);
 	printf("read: %s string len: %d (including null)\n", sendBuf, sendLen);
@@ -95,7 +101,7 @@ void processStdin(int socketNum){
         close(socketNum);
         removeFromPollSet(socketNum);
         //remove socket from handle table in P2
-		printf("Server has terminated\n");
+		printf("\nServer has terminated\n");
         exit(1);
 	}
 }
@@ -128,8 +134,9 @@ int readFromStdin(uint8_t * buffer)
 void checkArgs(int argc, char * argv[])
 {
 	/* check command line arguments  */
-	if (argc != 3)
+	if (argc != 3) //4
 	{
+		//printf("usage: %s handle-name host-name port-number \n", argv[0]);
 		printf("usage: %s host-name port-number \n", argv[0]);
 		exit(1);
 	}

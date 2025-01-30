@@ -18,6 +18,7 @@
 #include "networks.h"
 #include "safeUtil.h"
 #include "myPDUfncs.h"
+#include "HandleTable.h"
 
 #define MAXBUF 1024
 #define DEBUG_FLAG 1
@@ -35,10 +36,9 @@ int main(int argc, char *argv[])
 	
 	//create the server socket
 	mainServerSocket = tcpServerSetup(portNumber);
-    
+    HandleTable handleTable = createtable();
 	//manage server communication
 	serverControl(mainServerSocket);
-	
 	/* close the sockets */
 	close(mainServerSocket);
 	return 0;
