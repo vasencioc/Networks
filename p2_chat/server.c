@@ -116,10 +116,11 @@ void processClient(int clientSocket, HandleTable *table){
     uint8_t dataBuffer[MAXBUF];
 	//now get the data from the client_socket
     messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF);
+	//char *message = messagePacking(dataBuffer);
 	//check if connection was closed or error
 	if(messageLen > 0){
-		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
-		uint8_t flag = dataBuffer[2];
+		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, message);
+		uint8_t flag = dataBuffer[0];
 		switch(flag) {
 			case(FLAG1): clientLogin(clientSocket, table, dataBuffer + 1); break;
 			default: break;

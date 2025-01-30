@@ -59,7 +59,7 @@ void serverClosed(int socket){
 }
 
 void login(char * handle, int socketNum){
-	uint8_t handleLen = strlen(handle) + 1; //add one for null
+	uint8_t handleLen = strlen(handle); //add one for null
 	int dataLen = FLAG_SIZE + handleLen + 1; //add one for handleLen field
 	uint8_t *loginMessage = (uint8_t *)malloc(dataLen); //data buffer
 	uint8_t flag1 = FLAG1;
@@ -105,7 +105,7 @@ void processMsgFromServer(int socketNum){
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
 		//printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
-		uint8_t flag = dataBuffer[2];
+		uint8_t flag = dataBuffer[0];
 		switch(flag) {
 			case(FLAG2): printf("Login Successful\n"); break;
 			case(FLAG3): printf("Handle Already Exists\n"); exit(-1);

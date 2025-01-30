@@ -54,7 +54,22 @@ int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
         printf("Buffer Error\n");
         exit(-1);
     }
-    bytesReceived = recv(socketNumber, dataBuffer + 2, PDUlenHostOrder - 2, MSG_WAITALL);
+    bytesReceived = recv(socketNumber, dataBuffer, PDUlenHostOrder - 2, MSG_WAITALL);
     //return message length (== 0 if connection closed)
     return bytesReceived ;
+}
+
+/*Converts byte array into character array with null terminator*/
+char *packMessage(uint8_t *message uint16_t messageLen){
+    char *packed[messageLen + 1];
+    packed = (char *)message;
+    packed[messageLen] = '\n';
+    return packed;
+}
+
+/*Converts character array into byte array without null terminator*/
+uint8_t *unpackMessage(char *message){
+    uint8_t *unpacked = (uint8_t *)malloc(strlen(message));
+    memcpy(unpacked, message, strlen(message)); 
+    return unpacked;
 }
