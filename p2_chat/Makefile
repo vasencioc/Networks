@@ -26,7 +26,7 @@ clean:
 	rm -f server cclient *.o
 
 # CC = gcc
-# CFLAGS = -Wall -Wextra -Werror -std=c99 -pedantic -g
+# CFLAGS = -Wall -Wextra -Werror -std=gnu99 -pedantic -g
 # LDFLAGS = -g
 
 # tableTest: tableTest.o HandleTable.o
