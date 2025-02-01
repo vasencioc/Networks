@@ -9,7 +9,6 @@
 #include "chatHelpers.h"
 #include "HandleTable.h"
 
-#define MAXBUF 1024
 #define DEBUG_FLAG 1
 #define CHATHEADER_SIZE 3
 #define PDULEN_SIZE 2
@@ -24,7 +23,6 @@ void login(char *handle, int socketNum);
 void clientControl(char *handle, int socketNum);
 void processMsgFromServer(char *handle, int socketNum);
 void processStdin(char *handle, int socketNum);
-int readFromStdin(uint8_t * buffer);
 void checkArgs(int argc, char * argv[]);
 
 int main(int argc, char * argv[]){
@@ -132,10 +130,10 @@ void getHandlesList(char * handle, int socketNum, uint8_t *packet){
 }
 
 void processMsgFromServer(char *handle, int socketNum){
-    uint8_t dataBuffer[MAXBUF];
+    uint8_t dataBuffer[MAXPACKET];
 	int messageLen = 0;
 	//now get the data from the server socket
-	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
+	if((messageLen = recvPDU(socketNum, dataBuffer, MAXPACKET)) > 0){
 		//printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
 		uint8_t flag = dataBuffer[0];
 		switch(flag) {
@@ -161,17 +159,62 @@ void processMsgFromServer(char *handle, int socketNum){
 	}
 }
 
-int messagePacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socketNum){
-	//int sent = 0;
+void buildHdr(uint8_t flag, char *clientHandle, uint8_t *buffer){
+	uint8_t *clientHandlePacked = packHandle(clientHandle);
+	buffer[0] = flag;	// to complete chat header
+	memcpy(buffer + 1, clientHandlePacked, strlen(clientHandle) + 1); //packet starts w/ packed src handle
+}
+
+int getTxt(uint8_t *buffer, int *inputLen, char *aChar){
+	int textLen = 0;
+	while ((*inputLen < (MAXPACKET - 1)) && (*aChar != '\n') && (textLen < 199))
+	{
+		*aChar = getchar();
+		if (*aChar != '\n')
+		{	
+			buffer[*inputLen] = *aChar;
+			(*inputLen)++;
+			textLen++;
+		}
+	}
+	return textLen;
+}
+
+void sendTxt(int socketNum, uint8_t *buffer, int inputLen){
+	buffer[inputLen] = '\0'; // null terminate the string
+	inputLen++;
+	sendPDU(socketNum, buffer, inputLen);
+}
+
+//get destination handles and add to buffer
+// void addDestHandles(uint8_t *buffer, int *inputLen, char *aChar){
+// 		char destHandle[MAXHANDLE];
+// 		uint8_t destHandleLen = 0;
+// 		*aChar = getchar();
+// 		//get handle name
+// 		while(*aChar != ' '){
+// 			destHandle[destHandleLen] = *aChar;
+// 			destHandleLen++;
+// 			*aChar = getchar();
+// 		}
+// 		//null terminate
+// 		destHandle[destHandleLen] = '\0'; //making string
+// 		destHandleLen++;
+// 		//pack string
+// 		uint8_t * destHandlePacked = packHandle(destHandle);
+// 		//add packed dest handle to packet
+// 		memcpy(buffer + (*inputLen), destHandlePacked, destHandleLen);
+// 		(*inputLen) += destHandleLen;
+// }
+
+void messagePacket(uint8_t flag, char *clientHandle, int socketNum){
+	uint8_t buffer[MAXPACKET]; //data buffer
 	char aChar = 0;
 	int inputLen = 0;        
 	uint8_t numDest = 0;
 	char destHandle[100];
 	
-	uint8_t *clientHandlePacked = packHandle(clientHandle);
-	buffer[0] = flag;	// to complete chat header
-	memcpy(buffer + 1, clientHandlePacked, strlen(clientHandle) + 1); //packet starts w/ packed src handle
-	//free(clientHandlePacked); 		     // copied and no longer needed
+	buildHdr(flag, clientHandle, buffer);
 	inputLen = strlen(clientHandle) + 2; // add packed header len and flag to packet len
 
 	if(flag == 5){
@@ -179,23 +222,23 @@ int messagePacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socket
 	} else{
 		if(getchar() != ' '){ //expect space
 			printf("Expect space between value\n");
-			return 0; //MAY CAUSE ISSUES
+			return; //MAY CAUSE ISSUES
 		}
 		numDest = getchar() - '0'; //expect num handles
 		if((numDest > 9) || (numDest < 2)){
 			printf("Invalid number of handles\n");
-			return 0; //MAY CAUSE ISSUES
+			return; //MAY CAUSE ISSUES
 		}
 
 	}
 	buffer[inputLen] = numDest;
 	inputLen++;
-	aChar = getchar(); // expect space
+	if(getchar() != ' '); // expect space
 	// get destination handles and add to buffer
 	for(uint8_t i = 0; i < numDest; i++){
 		uint8_t destHandleLen = 0;
 		aChar = getchar();
-		while(aChar != ' '){
+		while(aChar != ' ' && aChar != '\n'){
 			destHandle[destHandleLen] = aChar;
 			destHandleLen++;
 			aChar = getchar();
@@ -208,57 +251,31 @@ int messagePacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socket
 		inputLen += destHandleLen;
 		//free(destHandlePacked); 		  // copied and no longer needed
 	}
-	int textLen = 0;
-	while ((inputLen < (MAXBUF - 1)) && (aChar != '\n') && (textLen < 199))
-	{
-		aChar = getchar();
-		if (aChar != '\n')
-		{	
-			buffer[inputLen] = aChar;
-			inputLen++;
-			textLen++;
-		}
-	}
-	
+	int textLen = getTxt(buffer, &inputLen, &aChar);
 	// Null terminate the string
 	buffer[inputLen] = '\0';
 	inputLen++;
 	//sent = 
-	return sendPDU(socketNum, buffer, inputLen);
+	sendPDU(socketNum, buffer, inputLen);
 }
 
-int broadcastPacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socketNum){
+void broadcastPacket(uint8_t flag, char *clientHandle, int socketNum){
+	uint8_t buffer[MAXPACKET]; //data buffer
+	int inputLen = 0;
 	char aChar = 0;
-	int inputLen = 0; 
-	int textLen = 0;
-	uint8_t *clientHandlePacked = packHandle(clientHandle);
-	buffer[0] = flag;	// to complete chat header
-	memcpy(buffer + 1, clientHandlePacked, strlen(clientHandle) + 1); //packet starts w/ packed src handle
-	//free(clientHandlePacked); 		     // copied and no longer needed
+	buildHdr(flag, clientHandle, buffer);
 	inputLen = strlen(clientHandle) + 2; // add packed header len and flag to packet len
-	if(getchar() != ' '){printf("Expect space between value\n");}
-	while ((inputLen < (MAXBUF - 1)) && (aChar != '\n') && (textLen < 199))
-	{
-		aChar = getchar();
-		if (aChar != '\n')
-		{	
-			buffer[inputLen] = aChar;
-			inputLen++;
-			textLen++;
-		}
-	}
-	
-	// Null terminate the string
-	buffer[inputLen] = '\0';
-	inputLen++;
-	return sendPDU(socketNum, buffer, inputLen);
+	//get text
+	int textLen = getTxt(buffer, &inputLen, &aChar);
+	//check if message not complete and break it up
+	if((aChar != '\n') && (textLen == 199)){
+		sendTxt(socketNum, buffer, inputLen);
+		//broadcast rest of packet
+		broadcastPacket(flag, clientHandle, socketNum);
+	} else sendTxt(socketNum, buffer, inputLen);
 }
 
 void processStdin(char *handle, int socketNum){
-    uint8_t sendBuf[MAXBUF]; //data buffer
-	//int sendLen = 0;         //amount of data to send
-	int sent = 0;            //actual amount of data sent
-
 	char command = 0;
 	while(command != '%'){
 		command = getchar();
@@ -266,49 +283,24 @@ void processStdin(char *handle, int socketNum){
 	command = getchar();
 	switch(tolower(command)){
 		case('m'): {
-			sent = messagePacket(5, handle, sendBuf, socketNum); 
+			messagePacket(5, handle, socketNum); 
 			printPrompt();
 			break;
 		}
 		case('c'): {
-			sent = messagePacket(6, handle, sendBuf, socketNum); 
+			messagePacket(6, handle, socketNum); 
 			printPrompt();
 			break;
 		}
 		case('b'): {
-			sent = broadcastPacket(4, handle,sendBuf, socketNum);
+			if(getchar() != ' '){printf("Expect space between value\n");}
+			broadcastPacket(4, handle, socketNum);
 			printPrompt();
 			break;
 		}
-		case('l'): sent = sendFlag(socketNum, 10); break;
+		case('l'): sendFlag(socketNum, 10); break;
 		default: printf("Invalid Command\n"); break;
 	}
-	
-	if(sent <= 0) serverClosed(socketNum);
-}
-
-int readFromStdin(uint8_t * buffer){
-	char aChar = 0;
-	int inputLen = 0;        
-	
-	// Important you don't input more characters than you have space 
-	buffer[0] = '\0';
-	
-	while (inputLen < (MAXBUF - 1) && aChar != '\n')
-	{
-		aChar = getchar();
-		if (aChar != '\n')
-		{
-			buffer[inputLen] = aChar;
-			inputLen++;
-		}
-	}
-	
-	// Null terminate the string
-	buffer[inputLen] = '\0';
-	inputLen++;
-	
-	return inputLen;
 }
 
 void checkArgs(int argc, char * argv[]){

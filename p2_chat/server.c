@@ -9,7 +9,7 @@
 #include "chatHelpers.h"
 #include "HandleTable.h"
 
-#define MAXBUF 1024
+//#define MAXBUF 1024
 #define DEBUG_FLAG 1
 #define CHATHEADER_SIZE 3
 #define PDULEN_SIZE 2
@@ -153,9 +153,9 @@ void sendHandles(HandleTable * table, int socket){
 void processClient(int clientSocket, HandleTable *table){
 	uint8_t flag;
 	int messageLen = 0;
-    uint8_t dataBuffer[MAXBUF];
+    uint8_t dataBuffer[MAXPACKET];
 	//now get the data from the client_socket
-    messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF);
+    messageLen = recvPDU(clientSocket, dataBuffer, MAXPACKET);
 	//check if connection was closed or error
 	if(messageLen > 0){
 		//printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
