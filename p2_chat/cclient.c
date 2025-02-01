@@ -32,9 +32,9 @@
 #define FLAG3 3
 
 void serverClosed(int socket);
-void login(char * handle, int socketNum);
-void clientControl(char * handleName, int socketNum);
-void processMsgFromServer(int socketNum);
+void login(char *handle, int socketNum);
+void clientControl(char *handle, int socketNum);
+void processMsgFromServer(char *handle, int socketNum);
 void processStdin(char *handle, int socketNum);
 int readFromStdin(uint8_t * buffer);
 void checkArgs(int argc, char * argv[]);
@@ -79,10 +79,10 @@ void login(char * handle, int socketNum){
 	//wait to receive server response
 	int readySocket;
 	while(readySocket != socketNum) readySocket = pollCall(-1); //poll until a socket is ready
-	processMsgFromServer(readySocket);
+	processMsgFromServer(handle, readySocket);
 }
 
-void clientControl(char * handleName, int socketNum){
+void clientControl(char *handle, int socketNum){
 	//add stdin to pollset for client input
     addToPollSet(STDIN_FILENO);
 	int readySocket;
@@ -90,8 +90,8 @@ void clientControl(char * handleName, int socketNum){
 		printf("$: ");
 		fflush(stdout);
 		readySocket = pollCall(-1); //poll until a socket is ready
-		if(readySocket == socketNum) processMsgFromServer(readySocket);
-		else if(readySocket == STDIN_FILENO) processStdin(handleName, socketNum);
+		if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
+		else if(readySocket == STDIN_FILENO) processStdin(handle, socketNum);
 		else{
 			close(socketNum);
 			perror("poll timeout");
@@ -130,26 +130,29 @@ void displayBroadcast(uint8_t *packet){
 	free(srcHandle);
 }
 
-void getNumHandles(uint8_t *packet){
+void getNumHandles(char * handle, int socketNum, uint8_t *packet){
 	uint32_t numNetOrdr, numHostOrdr;
 	memcpy(&numNetOrdr, packet + 1, 4);
 	numHostOrdr = ntohl(numNetOrdr);
 	printf("Number of clients: %d\n", numHostOrdr);
+	int readySocket = pollCall(-1); //poll until next handle ready;
+	if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
+	else{close(socketNum);}
 }
 
-void getHandlesList(int socketNum, uint8_t *packet){
+void getHandlesList(char * handle, int socketNum, uint8_t *packet){
 	char *handleName = unpackHandle(packet + 1);
 	printf("\t%s\n", handleName);
 	free(handleName);
 	int readySocket = pollCall(-1); //poll until next handle ready;
-	if(readySocket == socketNum) processMsgFromServer(readySocket);
+	if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
 	else{close(socketNum);}
+	//free(handleName);
 }
 
-void processMsgFromServer(int socketNum){
+void processMsgFromServer(char *handle, int socketNum){
     uint8_t dataBuffer[MAXBUF];
 	int messageLen = 0;
-	uint32_t numHandles = 0;
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
 		//printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
@@ -160,13 +163,13 @@ void processMsgFromServer(int socketNum){
 			case(5): displayText(dataBuffer); break;
 			case(6): displayText(dataBuffer); break;
 			case(4): displayBroadcast(dataBuffer); break;
-			case(11):{
-				numHandles = getNumHandles(dataBuffer);
-				while(numHandle){
-					
-				}
+			case(11): getNumHandles(handle, socketNum, dataBuffer); break;
+			case(12): getHandlesList(handle, socketNum, dataBuffer); break;
+			case(13): {
+				addToPollSet(STDIN_FILENO);
+				fflush(stdin);
+				break;
 			}
-			case(12): getHandlesList(socketNum, dataBuffer); break;
 			default: break;
 		}
 	}
@@ -289,7 +292,14 @@ void processStdin(char *handle, int socketNum){
 			case('m'): sent = messagePacket(5, handle, sendBuf, socketNum); break;
 			case('c'): sent = messagePacket(6, handle, sendBuf, socketNum); break;
 			case('b'): sent = broadcastPacket(4, handle,sendBuf, socketNum); break;
-			case('l'): sent = sendFlag(socketNum, 10); break;
+			case('l'): {
+				sent = sendFlag(socketNum, 10);
+				removeFromPollSet(STDIN_FILENO);
+				int readySocket = pollCall(-1); //poll until next handle ready;
+				if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
+				else{close(socketNum);}
+				break;
+			}
 			default: printf("Invalid Command\n"); break;
 		}
 	}
@@ -313,8 +323,7 @@ void processStdin(char *handle, int socketNum){
 	// }
 }
 
-int readFromStdin(uint8_t * buffer)
-{
+int readFromStdin(uint8_t * buffer){
 	char aChar = 0;
 	int inputLen = 0;        
 	
@@ -338,8 +347,7 @@ int readFromStdin(uint8_t * buffer)
 	return inputLen;
 }
 
-void checkArgs(int argc, char * argv[])
-{
+void checkArgs(int argc, char * argv[]){
 	/* check command line arguments  */
 	if (argc != 4)
 	{

@@ -145,12 +145,15 @@ void sendHandles(HandleTable * table, int socket){
 	int sent = 0;
 	uint8_t flag11 = 11;
 	uint8_t flag12 = 12;
+	uint8_t flag13 = 13;
+	//send num handles
 	uint32_t numHandles = htonl(table->size);
 	uint8_t dataBuffer[5];
 	memcpy(dataBuffer, &flag11, 1);
 	memcpy(dataBuffer + 1, &numHandles, 4);
 	sent = sendPDU(socket, dataBuffer, 5);
 	if(sent <= 0) {clientClosed(socket);}
+	//send handles
 	else{
 		for(int i = 0; i < table->cap; i++){
 			if(table->arr[i]){
@@ -163,6 +166,8 @@ void sendHandles(HandleTable * table, int socket){
 				if(sent <= 0) {clientClosed(socket);}
 			}
     	}
+		//send flag 13 to indicate done sending handles
+		sendFlag(socket, flag13);
 	}
 }
 
