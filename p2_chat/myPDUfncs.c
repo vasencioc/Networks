@@ -60,19 +60,18 @@ int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
 }
 
 /*Converts byte array into character array with null terminator*/
-char *unpackHandle(uint8_t *handleBuff){
-    uint8_t handleLen = handleBuff[0];
-    char *packed = (char *)malloc(handleLen + 1);
-    memcpy(packed, handleBuff + 1, handleLen);
-    packed[handleLen + 1] = '\0';
+char *unpackHandle(uint8_t *handleBuff, uint8_t numChars){
+    static char packed[numChars + 1]; //add space for null
+    memcpy(packed, handleBuff + 1, numChars);
+    packed[numChars] = '\0';
     return packed;
 }
 
 /*Converts character array into byte array and preceded by handle length (without null terminator) and flag*/
-uint8_t *packHandle(char *handleStr){
-    uint8_t length = strlen(handleStr); //handle length excluding null
-    uint8_t *unpacked = (uint8_t *)malloc(length + 1); //handle - null + length
-    memcpy(unpacked, &length, 1); //handle preceded by its length
+uint8_t *packHandle(char *handleStr, uint8_t numChars){
+    //uint8_t length = strlen(handleStr); //handle length excluding null
+    static uint8_t unpacked[numChars + 1]; //handle - null + length field
+    memcpy(unpacked, &length, 1);  //handle preceded by its length
     memcpy(unpacked + 1, handleStr, length);  
     return unpacked;
 }

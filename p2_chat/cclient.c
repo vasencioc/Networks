@@ -86,9 +86,9 @@ void clientControl(char *handle, int socketNum){
 	//add stdin to pollset for client input
     addToPollSet(STDIN_FILENO);
 	int readySocket;
+	printf("$: ");
+	fflush(stdout);
 	while(1){
-		printf("$: ");
-		fflush(stdout);
 		readySocket = pollCall(-1); //poll until a socket is ready
 		if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
 		else if(readySocket == STDIN_FILENO) processStdin(handle, socketNum);
@@ -114,7 +114,8 @@ void displayText(uint8_t *packet){
 		offset += destHandleLen + 1; //move past destHandle
 	}
 	// at this point valuePtr should point to the beginning of the text message
-	printf("%s: %s\n", srcHandle, packet + offset);
+	printf("\n%s: %s\n$: ", srcHandle, packet + offset);
+	fflush(stdout);
 	free(srcHandle);
 }
 
@@ -126,27 +127,29 @@ void displayBroadcast(uint8_t *packet){
 	//valuePtr = valuePtr + srcHandleLen + 1; //move valuePtr past srcHandle
 	offset += (srcHandleLen + 1); //move past srcHandle
 	// at this point valuePtr should point to the beginning of the text message
-	printf("%s: %s\n", srcHandle, packet + offset);
+	printf("\n%s: %s\n$: ", srcHandle, packet + offset);
+	fflush(stdout);
 	free(srcHandle);
 }
 
 void getNumHandles(char * handle, int socketNum, uint8_t *packet){
+	removeFromPollSet(STDIN_FILENO);
 	uint32_t numNetOrdr, numHostOrdr;
 	memcpy(&numNetOrdr, packet + 1, 4);
 	numHostOrdr = ntohl(numNetOrdr);
 	printf("Number of clients: %d\n", numHostOrdr);
-	int readySocket = pollCall(-1); //poll until next handle ready;
-	if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
-	else{close(socketNum);}
+	// int readySocket = pollCall(-1); //poll until next handle ready;
+	// if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
+	// else{close(socketNum);}
 }
 
 void getHandlesList(char * handle, int socketNum, uint8_t *packet){
 	char *handleName = unpackHandle(packet + 1);
 	printf("\t%s\n", handleName);
 	free(handleName);
-	int readySocket = pollCall(-1); //poll until next handle ready;
-	if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
-	else{close(socketNum);}
+	// int readySocket = pollCall(-1); //poll until next handle ready;
+	// if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
+	// else{close(socketNum);}
 	//free(handleName);
 }
 
@@ -155,19 +158,20 @@ void processMsgFromServer(char *handle, int socketNum){
 	int messageLen = 0;
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
-		//printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
+		printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
 		uint8_t flag = dataBuffer[0];
 		switch(flag) {
-			case(FLAG2): printf("Login Successful\n"); break;
-			case(FLAG3): printf("Handle Already Exists\n"); exit(-1);
+			case(FLAG2): break;
+			case(FLAG3): printf("Handle already in use: %s\n", handle); exit(-1);
 			case(5): displayText(dataBuffer); break;
 			case(6): displayText(dataBuffer); break;
 			case(4): displayBroadcast(dataBuffer); break;
 			case(11): getNumHandles(handle, socketNum, dataBuffer); break;
 			case(12): getHandlesList(handle, socketNum, dataBuffer); break;
 			case(13): {
+				printf("$: ");
+				fflush(stdout);
 				addToPollSet(STDIN_FILENO);
-				fflush(stdin);
 				break;
 			}
 			default: break;
@@ -280,47 +284,34 @@ void processStdin(char *handle, int socketNum){
 	int sent = 0;            //actual amount of data sent
 
 	char command = 0;
-	while((command != '%') && (command !='\n')){
+	while(command != '%'){
 		command = getchar();
 	}
-	if(command == '\n'){
-		printf("No Command Entered\n"); 
-		return;
-	} else{
-		char command = getchar();
-		switch(tolower(command)){
-			case('m'): sent = messagePacket(5, handle, sendBuf, socketNum); break;
-			case('c'): sent = messagePacket(6, handle, sendBuf, socketNum); break;
-			case('b'): sent = broadcastPacket(4, handle,sendBuf, socketNum); break;
-			case('l'): {
-				sent = sendFlag(socketNum, 10);
-				removeFromPollSet(STDIN_FILENO);
-				int readySocket = pollCall(-1); //poll until next handle ready;
-				if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
-				else{close(socketNum);}
-				break;
-			}
-			default: printf("Invalid Command\n"); break;
+	command = getchar();
+	switch(tolower(command)){
+		case('m'): {
+			sent = messagePacket(5, handle, sendBuf, socketNum); 
+			printf("$: ");
+			fflush(stdout);
+			break;
 		}
+		case('c'): {
+			sent = messagePacket(6, handle, sendBuf, socketNum); 
+			printf("$: ");
+			fflush(stdout);
+			break;
+		}
+		case('b'): {
+			sent = broadcastPacket(4, handle,sendBuf, socketNum);
+			printf("$: ");
+			fflush(stdout);
+			break;
+		}
+		case('l'): sent = sendFlag(socketNum, 10); break;
+		default: printf("Invalid Command\n"); break;
 	}
+	
 	if(sent <= 0) serverClosed(socketNum);
-	//get data from stdin
-	//sendLen = readFromStdin(sendBuf);
-	//printf("sent: %s string len: %d (including null)\n", sendBuf, sendLen);
-	// //send data from stdin
-	// sent = sendPDU(socketNum, sendBuf, sendLen);
-	// if (sent > 0)
-	// {
-	// 	printf("Amount of data sent is: %d\n", sent);
-	// } 
-    // //clean up if connection closed
-	// else{
-    //     close(socketNum);
-    //     removeFromPollSet(socketNum);
-    //     //remove socket from handle table in P2
-	// 	printf("\nServer has terminated\n");
-    //     exit(1);
-	// }
 }
 
 int readFromStdin(uint8_t * buffer){

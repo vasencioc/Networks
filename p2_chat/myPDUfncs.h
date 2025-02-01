@@ -12,7 +12,7 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData);
 
 int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize); 
 
-char *unpackHandle(uint8_t *handleBuff);
+char *unpackHandle(uint8_t *handleBuff, uint8_t numChars);
 
 uint8_t *packHandle(char *handleStr);
 
