@@ -1,23 +1,12 @@
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/uio.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#include <strings.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <stdint.h>
+// 
+// Writen by Victoria Asencio-Clemens, Jan. 2025
+//
+// Server setup and control for chat
 
 #include "pollLib.h"
 #include "networks.h"
 #include "safeUtil.h"
-#include "myPDUfncs.h"
+#include "chatHelpers.h"
 #include "HandleTable.h"
 
 #define MAXBUF 1024
@@ -59,16 +48,9 @@ void clientClosed(int socket){
 void clientLogin(int clientSocket, HandleTable *table, uint8_t * handleBuffer){
 	char *handle = unpackHandle(handleBuffer);
 	int sent = 0;
-	if(getSocket(table, handle) != FAILURE) {
-		free(handle);
-		sent = sendFlag(clientSocket, FLAG3);
-	} else if(addHandle(table, handle, clientSocket) == FAILURE){
-		free(handle);
-		printf("Can't Overwrite Handle\n");
-		sent = sendFlag(clientSocket, FLAG3);
-	} else{
-		sent = sendFlag(clientSocket, FLAG2);
-	}
+	if(getSocket(table, handle) != FAILURE) sent = sendFlag(clientSocket, FLAG3);
+	else if(addHandle(table, handle, clientSocket) == FAILURE) sent = sendFlag(clientSocket, FLAG3);
+	else sent = sendFlag(clientSocket, FLAG2);
 	if(sent <= 0) clientClosed(clientSocket);
 }
 
@@ -119,10 +101,8 @@ void forwardMessage(HandleTable *table, uint8_t *packet, int packetLen){
 		int destSocket = getSocket(table, destHandle);
 		if(destSocket != FAILURE){
 			sent = sendPDU(destSocket, packet, packetLen);
-			if(sent <= 0) {clientClosed(destSocket);}
-			else if(sent != (packetLen + 2)) {printf("Error Forwarding text\n");}
+			if(sent <= 0) clientClosed(destSocket);
 		} else {printf("Client with handle %s does not exist.", destHandle);}
-		free(destHandle);
 	}
 }
 
@@ -134,11 +114,10 @@ void broadcastMessage(HandleTable *table, uint8_t *packet, int packetLen){
 	for(int i = 0; i < table->cap; i++){
         if(table->arr[i] && (strcmp(table->arr[i],srcHandle) != 0)){
             sent = sendPDU(i, packet, packetLen);
-			if(sent <= 0) {clientClosed(i);}
-			else if(sent != (packetLen + 2)) {printf("Error Forwarding text\n");}
+			if(sent <= 0) clientClosed(i);
         }
     }
-	free(srcHandle);
+	//free(srcHandle);
 }
 
 void sendHandles(HandleTable * table, int socket){
@@ -177,10 +156,9 @@ void processClient(int clientSocket, HandleTable *table){
     uint8_t dataBuffer[MAXBUF];
 	//now get the data from the client_socket
     messageLen = recvPDU(clientSocket, dataBuffer, MAXBUF);
-	//char *message = messagePacking(dataBuffer);
 	//check if connection was closed or error
 	if(messageLen > 0){
-		printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
+		//printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
 		flag = dataBuffer[0];
 		switch(flag) {
 			case(FLAG1): clientLogin(clientSocket, table, dataBuffer + 1); break;

@@ -6,7 +6,7 @@ CC= gcc
 CFLAGS= -g -Wall -std=gnu99
 LIBS = 
 
-OBJS = networks.o gethostbyname.o pollLib.o safeUtil.o myPDUfncs.o HandleTable.o
+OBJS = networks.o gethostbyname.o pollLib.o safeUtil.o chatHelpers.o HandleTable.o
 
 all:   cclient server
 
@@ -24,27 +24,3 @@ cleano:
 
 clean:
 	rm -f server cclient *.o
-
-# CC = gcc
-# CFLAGS = -Wall -Wextra -Werror -std=gnu99 -pedantic -g
-# LDFLAGS = -g
-
-# tableTest: tableTest.o HandleTable.o
-# 	$(CC) $(LDFLAGS) -o tableTest tableTest.o HandleTable.o
-
-# debug: tableTest.o HandleTable.o
-# 	$(CC) $(CFLAGS) $(LDFLAGS) -o tableTest tableTest.o HandleTable.o
-
-# test: debug
-# 	valgrind --leak-check=full --show-leak-kinds=all ./tableTest
-
-# HandleTable.o: HandleTable.c HandleTable.h
-# 	$(CC) $(CFLAGS) -c HandleTable.c
-
-# tableTest.o: tableTest.c HandleTable.h
-# 	$(CC) $(CFLAGS) -c tableTest.c
-
-# # Clean up
-# clean:
-# 	rm -f *.o tableTest *~
-

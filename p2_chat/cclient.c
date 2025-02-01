@@ -1,24 +1,12 @@
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/uio.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#include <strings.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <stdint.h>
-#include <ctype.h>
+// 
+// Writen by Victoria Asencio-Clemens, Jan. 2025
+//
+// Client setup and control for chat
 
 #include "pollLib.h"
 #include "networks.h"
 #include "safeUtil.h"
-#include "myPDUfncs.h"
+#include "chatHelpers.h"
 #include "HandleTable.h"
 
 #define MAXBUF 1024
@@ -51,6 +39,11 @@ int main(int argc, char * argv[]){
 	return 0;
 }
 
+void printPrompt(){
+	printf("$: ");
+	fflush(stdout);
+}
+
 void serverClosed(int socket){
 	close(socket);
     removeFromPollSet(socket);
@@ -61,21 +54,18 @@ void serverClosed(int socket){
 void login(char * handle, int socketNum){
 	uint8_t packetLen = strlen(handle) + 2; //add space for flag and length field
 	uint8_t flag1 = 1; //flag 1 for login
-	uint8_t *packed_handle = packHandle(handle); 			//get packed handle
-	uint8_t *handlePlusFlag = (uint8_t *)malloc(packetLen); //new buffer with space for flag
+	uint8_t *packed_handle = packHandle(handle); //get packed handle
+	uint8_t handlePlusFlag[packetLen]; //new buffer with space for flag
 	memcpy(handlePlusFlag, &flag1, 1); 						//packed handle preceded by flag
 	memcpy(handlePlusFlag + 1, packed_handle, packed_handle[0] + 1);
-	free(packed_handle);									//free packed handle before sending packet
 	int sent = sendPDU(socketNum, handlePlusFlag, packetLen);
-	free(handlePlusFlag); //no longer needed
 	//check if sent properly
-	if(sent <= 0){
-		serverClosed(socketNum);
-	}
+	if(sent <= 0) serverClosed(socketNum);
 
 	//polling setup
 	setupPollSet();
     addToPollSet(socketNum);
+
 	//wait to receive server response
 	int readySocket;
 	while(readySocket != socketNum) readySocket = pollCall(-1); //poll until a socket is ready
@@ -86,8 +76,7 @@ void clientControl(char *handle, int socketNum){
 	//add stdin to pollset for client input
     addToPollSet(STDIN_FILENO);
 	int readySocket;
-	printf("$: ");
-	fflush(stdout);
+	printPrompt();
 	while(1){
 		readySocket = pollCall(-1); //poll until a socket is ready
 		if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
@@ -103,9 +92,7 @@ void clientControl(char *handle, int socketNum){
 void displayText(uint8_t *packet){
 	int offset = 1; //skip flag
 	char *srcHandle = unpackHandle(packet + offset);
-	//uint8_t *valuePtr = packet +1
 	uint8_t srcHandleLen = (uint8_t)packet[offset];
-	//valuePtr = valuePtr + srcHandleLen + 1; //move valuePtr past srcHandle
 	offset += (srcHandleLen + 1); //move past srcHandle
 	uint8_t numDest = (uint8_t)packet[offset];
 	offset++; //move past num dest 
@@ -114,9 +101,8 @@ void displayText(uint8_t *packet){
 		offset += destHandleLen + 1; //move past destHandle
 	}
 	// at this point valuePtr should point to the beginning of the text message
-	printf("\n%s: %s\n$: ", srcHandle, packet + offset);
-	fflush(stdout);
-	free(srcHandle);
+	printf("\n%s: %s\n", srcHandle, packet + offset);
+	printPrompt();
 }
 
 void displayBroadcast(uint8_t *packet){
@@ -127,9 +113,9 @@ void displayBroadcast(uint8_t *packet){
 	//valuePtr = valuePtr + srcHandleLen + 1; //move valuePtr past srcHandle
 	offset += (srcHandleLen + 1); //move past srcHandle
 	// at this point valuePtr should point to the beginning of the text message
-	printf("\n%s: %s\n$: ", srcHandle, packet + offset);
-	fflush(stdout);
-	free(srcHandle);
+	printf("\n%s: %s\n", srcHandle, packet + offset);
+	printPrompt();
+	//free(srcHandle);
 }
 
 void getNumHandles(char * handle, int socketNum, uint8_t *packet){
@@ -138,19 +124,11 @@ void getNumHandles(char * handle, int socketNum, uint8_t *packet){
 	memcpy(&numNetOrdr, packet + 1, 4);
 	numHostOrdr = ntohl(numNetOrdr);
 	printf("Number of clients: %d\n", numHostOrdr);
-	// int readySocket = pollCall(-1); //poll until next handle ready;
-	// if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
-	// else{close(socketNum);}
 }
 
 void getHandlesList(char * handle, int socketNum, uint8_t *packet){
 	char *handleName = unpackHandle(packet + 1);
-	printf("\t%s\n", handleName);
-	free(handleName);
-	// int readySocket = pollCall(-1); //poll until next handle ready;
-	// if(readySocket == socketNum) processMsgFromServer(handle, readySocket);
-	// else{close(socketNum);}
-	//free(handleName);
+	printf("   %s\n", handleName);
 }
 
 void processMsgFromServer(char *handle, int socketNum){
@@ -158,7 +136,7 @@ void processMsgFromServer(char *handle, int socketNum){
 	int messageLen = 0;
 	//now get the data from the server socket
 	if((messageLen = recvPDU(socketNum, dataBuffer, MAXBUF)) > 0){
-		printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
+		//printf("\nMessage received on socket: %d, length: %d Data: %s\n", socketNum, messageLen, dataBuffer + 2);
 		uint8_t flag = dataBuffer[0];
 		switch(flag) {
 			case(FLAG2): break;
@@ -169,8 +147,7 @@ void processMsgFromServer(char *handle, int socketNum){
 			case(11): getNumHandles(handle, socketNum, dataBuffer); break;
 			case(12): getHandlesList(handle, socketNum, dataBuffer); break;
 			case(13): {
-				printf("$: ");
-				fflush(stdout);
+				printPrompt();
 				addToPollSet(STDIN_FILENO);
 				break;
 			}
@@ -194,7 +171,7 @@ int messagePacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socket
 	uint8_t *clientHandlePacked = packHandle(clientHandle);
 	buffer[0] = flag;	// to complete chat header
 	memcpy(buffer + 1, clientHandlePacked, strlen(clientHandle) + 1); //packet starts w/ packed src handle
-	free(clientHandlePacked); 		     // copied and no longer needed
+	//free(clientHandlePacked); 		     // copied and no longer needed
 	inputLen = strlen(clientHandle) + 2; // add packed header len and flag to packet len
 
 	if(flag == 5){
@@ -229,7 +206,7 @@ int messagePacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socket
 		//add packed dest handle to packet
 		memcpy(buffer + inputLen, destHandlePacked, destHandleLen);
 		inputLen += destHandleLen;
-		free(destHandlePacked); 		  // copied and no longer needed
+		//free(destHandlePacked); 		  // copied and no longer needed
 	}
 	int textLen = 0;
 	while ((inputLen < (MAXBUF - 1)) && (aChar != '\n') && (textLen < 199))
@@ -248,7 +225,6 @@ int messagePacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socket
 	inputLen++;
 	//sent = 
 	return sendPDU(socketNum, buffer, inputLen);
-	//printf("sent: %s len: %d (including null)\n", buffer, sent);
 }
 
 int broadcastPacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int socketNum){
@@ -258,7 +234,7 @@ int broadcastPacket(uint8_t flag, char *clientHandle, uint8_t * buffer, int sock
 	uint8_t *clientHandlePacked = packHandle(clientHandle);
 	buffer[0] = flag;	// to complete chat header
 	memcpy(buffer + 1, clientHandlePacked, strlen(clientHandle) + 1); //packet starts w/ packed src handle
-	free(clientHandlePacked); 		     // copied and no longer needed
+	//free(clientHandlePacked); 		     // copied and no longer needed
 	inputLen = strlen(clientHandle) + 2; // add packed header len and flag to packet len
 	if(getchar() != ' '){printf("Expect space between value\n");}
 	while ((inputLen < (MAXBUF - 1)) && (aChar != '\n') && (textLen < 199))
@@ -291,20 +267,17 @@ void processStdin(char *handle, int socketNum){
 	switch(tolower(command)){
 		case('m'): {
 			sent = messagePacket(5, handle, sendBuf, socketNum); 
-			printf("$: ");
-			fflush(stdout);
+			printPrompt();
 			break;
 		}
 		case('c'): {
 			sent = messagePacket(6, handle, sendBuf, socketNum); 
-			printf("$: ");
-			fflush(stdout);
+			printPrompt();
 			break;
 		}
 		case('b'): {
 			sent = broadcastPacket(4, handle,sendBuf, socketNum);
-			printf("$: ");
-			fflush(stdout);
+			printPrompt();
 			break;
 		}
 		case('l'): sent = sendFlag(socketNum, 10); break;
@@ -343,7 +316,6 @@ void checkArgs(int argc, char * argv[]){
 	if (argc != 4)
 	{
 		printf("usage: %s handle-name host-name port-number \n", argv[0]);
-		//printf("usage: %s host-name port-number \n", argv[0]);
 		exit(1);
 	}
 }
