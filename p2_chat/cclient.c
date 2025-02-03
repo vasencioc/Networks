@@ -113,7 +113,6 @@ void displayBroadcast(uint8_t *packet){
 	// at this point valuePtr should point to the beginning of the text message
 	printf("\n%s: %s\n", srcHandle, packet + offset);
 	printPrompt();
-	//free(srcHandle);
 }
 
 void getNumHandles(char * handle, int socketNum, uint8_t *packet){
@@ -155,7 +154,6 @@ void processMsgFromServer(char *handle, int socketNum){
 	//clean up if connection closed
 	else{
         serverClosed(socketNum);
-        
 	}
 }
 
@@ -186,33 +184,13 @@ void sendTxt(int socketNum, uint8_t *buffer, int inputLen){
 	sendPDU(socketNum, buffer, inputLen);
 }
 
-//get destination handles and add to buffer
-// void addDestHandles(uint8_t *buffer, int *inputLen, char *aChar){
-// 		char destHandle[MAXHANDLE];
-// 		uint8_t destHandleLen = 0;
-// 		*aChar = getchar();
-// 		//get handle name
-// 		while(*aChar != ' '){
-// 			destHandle[destHandleLen] = *aChar;
-// 			destHandleLen++;
-// 			*aChar = getchar();
-// 		}
-// 		//null terminate
-// 		destHandle[destHandleLen] = '\0'; //making string
-// 		destHandleLen++;
-// 		//pack string
-// 		uint8_t * destHandlePacked = packHandle(destHandle);
-// 		//add packed dest handle to packet
-// 		memcpy(buffer + (*inputLen), destHandlePacked, destHandleLen);
-// 		(*inputLen) += destHandleLen;
-// }
-
 void messagePacket(uint8_t flag, char *clientHandle, int socketNum){
 	uint8_t buffer[MAXPACKET]; //data buffer
 	char aChar = 0;
 	int inputLen = 0;        
 	uint8_t numDest = 0;
 	char destHandle[100];
+	int sendToSelf = 0;
 	
 	buildHdr(flag, clientHandle, buffer);
 	inputLen = strlen(clientHandle) + 2; // add packed header len and flag to packet len
@@ -244,6 +222,7 @@ void messagePacket(uint8_t flag, char *clientHandle, int socketNum){
 			aChar = getchar();
 		}
 		destHandle[destHandleLen] = '\0'; //null terminate handle name
+		if(strcmp(destHandle, clientHandle) == 0) sendToSelf = 1;
 		destHandleLen++;
 		uint8_t * destHandlePacked = packHandle(destHandle);
 		//add packed dest handle to packet
@@ -251,12 +230,27 @@ void messagePacket(uint8_t flag, char *clientHandle, int socketNum){
 		inputLen += destHandleLen;
 		//free(destHandlePacked); 		  // copied and no longer needed
 	}
-	int textLen = getTxt(buffer, &inputLen, &aChar);
-	// Null terminate the string
-	buffer[inputLen] = '\0';
-	inputLen++;
-	//sent = 
-	sendPDU(socketNum, buffer, inputLen);
+	// Read message text
+	uint8_t *messageStart = buffer + inputLen;
+	//int textLen = getTxt(buffer, &inputLen, &aChar);
+	int firstChunkSent = 0;
+	while(1) {
+		int textLen = getTxt(buffer, &inputLen, &aChar);
+	// Loop until the full message is sent
+	//while (aChar != '\n' || textLen == 199) {
+		// Send current chunk
+		sendTxt(socketNum, buffer, inputLen);
+		if (!firstChunkSent && sendToSelf) {
+			// If sending to self, process the first packet before continuing
+			removeFromPollSet(STDIN_FILENO);
+			int readySocket = pollCall(-1);
+			processMsgFromServer(clientHandle, readySocket);
+			addToPollSet(STDIN_FILENO);
+			firstChunkSent = 1;
+		}
+		if ((aChar == '\n') || (textLen < 199)) break;
+		inputLen = messageStart - buffer;
+	}
 }
 
 void broadcastPacket(uint8_t flag, char *clientHandle, int socketNum){
