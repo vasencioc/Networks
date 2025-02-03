@@ -93,7 +93,10 @@ void forwardMessage(HandleTable *table, uint8_t *packet, int packetLen){
 	offset += (srcHandleLen + 1); //move past srcHandle
 	uint8_t numDest = (uint8_t)packet[offset];
 	offset++; //move past num dest 
-
+	// for (size_t i = 0; i < packetLen; i++) {
+    //     printf("%02X ", packet[i]);  // Print each byte as a two-digit hex
+    // }
+    // printf("\n");  // Newline after printing all bytes
 	for(uint8_t i = 0; i < numDest; i++){
 		char *destHandle = unpackHandle(packet + offset);
 		uint8_t destHandleLen = (uint8_t)packet[offset];
@@ -110,7 +113,10 @@ void broadcastMessage(HandleTable *table, uint8_t *packet, int packetLen){
 	int sent = 0;
 	int offset = 1; //skip flag
 	char* srcHandle = unpackHandle(packet + offset);
-
+	// for (size_t i = 0; i < packetLen; i++) {
+    //     printf("%02X ", packet[i]);  // Print each byte as a two-digit hex
+    // }
+    // printf("\n");  // Newline after printing all bytesS
 	for(int i = 0; i < table->cap; i++){
         if(table->arr[i] && (strcmp(table->arr[i],srcHandle) != 0)){
             sent = sendPDU(i, packet, packetLen);

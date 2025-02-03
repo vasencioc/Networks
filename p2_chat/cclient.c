@@ -100,7 +100,7 @@ void displayText(uint8_t *packet){
 	}
 	// at this point valuePtr should point to the beginning of the text message
 	printf("\n%s: %s\n", srcHandle, packet + offset);
-	printPrompt();
+	//printPrompt();
 }
 
 void displayBroadcast(uint8_t *packet){
@@ -181,6 +181,10 @@ int getTxt(uint8_t *buffer, int *inputLen, char *aChar){
 void sendTxt(int socketNum, uint8_t *buffer, int inputLen){
 	buffer[inputLen] = '\0'; // null terminate the string
 	inputLen++;
+	// for (size_t i = 0; i < inputLen; i++) {
+    //     printf("%02X ", buffer[i]);  // Print each byte as a two-digit hex
+    // }
+    printf("\n");  // Newline after printing all bytes
 	sendPDU(socketNum, buffer, inputLen);
 }
 
