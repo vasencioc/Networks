@@ -35,16 +35,6 @@ int main(int argc, char * argv[]){
 	/* set up the TCP Client socket  */
 	socketNum = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
     login(argv[1], socketNum);
-	// for(int i = 0; i < 200; i++){
-	// 	char handleName[250] = {0};
-	// 	sprintf(handleName, "test%d", i);
-	// 	socketNum = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
-	// 	login(handleName, socketNum);
-	// }
-
-	// while(1) {};
-
-	// return 0;
 	clientControl(argv[1], socketNum);
 	close(socketNum);
 	return 0;
