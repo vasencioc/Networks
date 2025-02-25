@@ -26,6 +26,7 @@ void sendTxt(int socketNum, uint8_t *buffer, uint16_t *inputLen);
 uint8_t packDestHandles(uint16_t *inputLen, uint8_t numDest, char *clientHandle, uint8_t *buffer);
 void messagePacket(uint8_t flag, char *clientHandle, int socketNum);
 void displayError(uint8_t *buffer);
+
 /*** Source Code ***/
 int main(int argc, char * argv[]){
 	int socketNum = 0;         //socket descriptor
@@ -34,6 +35,16 @@ int main(int argc, char * argv[]){
 	/* set up the TCP Client socket  */
 	socketNum = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
     login(argv[1], socketNum);
+	// for(int i = 0; i < 200; i++){
+	// 	char handleName[250] = {0};
+	// 	sprintf(handleName, "test%d", i);
+	// 	socketNum = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
+	// 	login(handleName, socketNum);
+	// }
+
+	// while(1) {};
+
+	// return 0;
 	clientControl(argv[1], socketNum);
 	close(socketNum);
 	return 0;
@@ -70,18 +81,15 @@ void login(char * handle, int socketNum){
 	//check if sent properly
 	if(sent <= 0) serverClosed(socketNum);
 
-	//polling setup
-	setupPollSet();
-    addToPollSet(socketNum);
-
-	//wait to receive server response
-	int readySocket;
-	while(readySocket != socketNum) readySocket = pollCall(-1); //poll until a socket is ready
-	processMsgFromServer(handle, readySocket);
+	//get server response
+	processMsgFromServer(handle, socketNum);
 }
 
 /*Controls client communication from server and stdin*/
 void clientControl(char *handle, int socketNum){
+	//polling setup
+	setupPollSet();
+    addToPollSet(socketNum);
 	//add stdin to pollset for client input
     addToPollSet(STDIN_FILENO);
 	int readySocket;
@@ -132,6 +140,7 @@ void getHandlesList(char * handle, int socketNum, uint8_t *packet){
 	printf("   %s\n", handleName);
 }
 
+/*Print error message for invalid handles*/
 void displayError(uint8_t *buffer) {
     char *invalidHandle = unpackHandle(buffer + 1);
     printf("Client with handle %s does not exist.\n", invalidHandle);
@@ -230,6 +239,7 @@ uint8_t packDestHandles(uint16_t *inputLen, uint8_t numDest, char *clientHandle,
 /*Creates a packet for sending text messages*/
 void messagePacket(uint8_t flag, char *clientHandle, int socketNum){
 	uint8_t sendToSelf = 0, numDest = 0, buffer[MAXPACKET]; 
+	memset(buffer, 0, MAXPACKET);
 	char aChar = 0;
 	uint16_t inputLen = 0;        
 	//build header with client handle
@@ -251,14 +261,10 @@ void messagePacket(uint8_t flag, char *clientHandle, int socketNum){
 	int firstChunkSent = 0;
 	// loop until the full message is sent
 	while(1) {
-		int textLen = getTxt(buffer, &inputLen, &aChar);
-		sendTxt(socketNum, buffer, &inputLen);
+		int textLen = getTxt(buffer, &inputLen, &aChar); //get text from stdin
+		sendTxt(socketNum, buffer, &inputLen); //send message
 		if (!firstChunkSent && sendToSelf) {
-			// If sending to self, process the first packet before continuing
-			//removeFromPollSet(STDIN_FILENO);
-			//int readySocket = pollCall(-1);
-			processMsgFromServer(clientHandle, socketNum);
-			//addToPollSet(STDIN_FILENO);
+			processMsgFromServer(clientHandle, socketNum); //get message sent to self
 			firstChunkSent = 1;
 		}
 		if ((aChar == '\n') || (textLen < MAXTEXT)) break;

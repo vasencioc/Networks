@@ -22,11 +22,8 @@ int sendPDU(int clientSocket, uint8_t * dataBuffer, int lengthOfData){
     uint16_t lenPDUNetOrder = htons(lengthOfPDU);
     memcpy(PDU, &lenPDUNetOrder, 2);
     memcpy(PDU + 2, dataBuffer, lengthOfData);
+
     //send PDU
-    // for (int i = 0; i < lengthOfPDU; i++) {
-    //     printf("%02X ", PDU[i]);  // Print each byte as a two-digit hex
-    // }
-    // printf("\n");
     bytesSent = send(clientSocket, PDU, lengthOfPDU, 0);
     return bytesSent; //return num bytes sent (length of PDU)
 }
@@ -53,15 +50,8 @@ int recvPDU(int socketNumber, uint8_t * dataBuffer, int bufferSize){
         printf("Buffer Error\n");
         exit(-1);
     }
-    // for (int i = 0; i < bytesReceived; i++) {
-    //     printf("%02X ", dataBuffer[i]);  // Print each byte as a two-digit hex
-    // }
-    bytesReceived = recv(socketNumber, dataBuffer, PDUlenHostOrder - 2, MSG_WAITALL);
-    // for (int i = 0; i < bytesReceived; i++) {
-    //     printf("%02X ", dataBuffer[i]);  // Print each byte as a two-digit hex
-    // }
-    // printf("\n");
-    //return message length (== 0 if connection closed)
+
+    bytesReceived = safeRecv(socketNumber, dataBuffer, PDUlenHostOrder - 2, MSG_WAITALL);
     return bytesReceived;
 }
 

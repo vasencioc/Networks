@@ -26,7 +26,6 @@ int main(int argc, char *argv[]) {
 	int mainServerSocket = 0;   //socket descriptor for the server socket
 	int portNumber = 0;
 	portNumber = checkArgs(argc, argv);
-	
 	//create the server socket
 	mainServerSocket = tcpServerSetup(portNumber);
 	//manage server communication
@@ -83,7 +82,6 @@ void serverControl(int mainServerSocket){
 void addNewSocket(int readySocket){
 	//accept client and add to pollset
     int newSocket = tcpAccept(readySocket, DEBUG_FLAG);
-	//if(clientLogin(newSocket) == FAILURE)
     addToPollSet(newSocket);
 }
 
@@ -161,16 +159,16 @@ void sendHandles(HandleTable * table, int socket){
 	}
 }
 
-/* COntrol client communication*/
+/* Control client communication*/
 void processClient(int clientSocket, HandleTable *table){
 	uint8_t flag;
 	int messageLen = 0;
     uint8_t dataBuffer[MAXPACKET];
+	memset(dataBuffer, 0, MAXPACKET);
 	//now get the data from the client_socket
     messageLen = recvPDU(clientSocket, dataBuffer, MAXPACKET);
 	//check if connection was closed or error
 	if(messageLen > 0){
-		//printf("Message received on socket: %d, length: %d Data: %s\n", clientSocket, messageLen, dataBuffer + 2);
 		flag = dataBuffer[0];
 		switch(flag) {
 			case(FLAG1): clientLogin(clientSocket, table, dataBuffer + 1); break;
