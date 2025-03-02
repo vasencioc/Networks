@@ -1,0 +1,69 @@
+=== HandleTable2 Full Functionality Test ===
+HandleTable created successfully with initial capacity: 5
+
+Current HandleTable (size: 0, cap: 5):
+Socket 0: [EMPTY]
+Socket 1: [EMPTY]
+Socket 2: [EMPTY]
+Socket 3: [EMPTY]
+Socket 4: [EMPTY]
+
+Adding handles...
+Added handle1 at socket 0
+Added handle2 at socket 1
+Added handle3 at socket 2
+
+Current HandleTable (size: 3, cap: 5):
+Socket 0: User1
+Socket 1: User2
+Socket 2: User3
+Socket 3: [EMPTY]
+Socket 4: [EMPTY]
+
+Adding duplicate handle at socket 1 (should fail)...
+Correctly rejected duplicate handle at socket 1
+
+Testing getSocket()...
+Socket for handle1: 0
+Socket for handle2: 1
+Socket for non-existent handle: -1
+
+Testing getHandle()...
+Handle at socket 0: User1
+Handle at socket 2: User3
+Handle at non-existent socket 5: NULL
+
+Removing handle at socket 1...
+
+Current HandleTable (size: 2, cap: 5):
+Socket 0: User1
+Socket 1: [EMPTY]
+Socket 2: User3
+Socket 3: [EMPTY]
+Socket 4: [EMPTY]
+
+Trying to remove from empty socket 1 (should do nothing)...
+
+Resizing table to capacity 10...
+Successfully resized table to capacity 10.
+
+Adding handle4 at socket 5...
+Successfully added handle4 at socket 5.
+
+Current HandleTable (size: 3, cap: 10):
+Socket 0: User1
+Socket 1: [EMPTY]
+Socket 2: User3
+Socket 3: [EMPTY]
+Socket 4: [EMPTY]
+Socket 5: User4
+Socket 6: [EMPTY]
+Socket 7: [EMPTY]
+Socket 8: [EMPTY]
+Socket 9: [EMPTY]
+
+Resizing table to capacity 2 (should fail or safely handle)
+Correctly prevented unsafe shrinking.
+
+Destroying HandleTable...
+HandleTable destroyed successfully.
