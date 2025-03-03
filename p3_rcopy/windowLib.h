@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h> 
 #include <string.h>
+#include <stdio.h>
 
 /* WindowVal: Represents one entry in the window buffer*/
 typedef struct WindowVal{
@@ -17,22 +18,22 @@ typedef struct WindowVal{
     uint8_t *PDU;
 } WindowVal;
 
-/*Window Buffer as */
+/* Window as circular buffer */
 typedef struct WindowBuff{
     uint32_t lower;
     uint32_t upper;
     uint32_t current;
     uint32_t windowLen;
     uint32_t valueLen;
-    WindowVal *windowBuff;
+    WindowVal *buffer;
 } WindowBuff;
 
 /* handle table control functions */
-WindowBuff createWindow(uint32_t windowLen, uint32_t valueLen);
+WindowBuff createWindow(uint32_t windowLength, uint32_t valueLength);
 void destroyWindow(WindowBuff *window);
-void addVal(WindowBuff *window, uint8_t *PDU, uint32_t sequenceNum);
+void addVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum);
 WindowVal getVal(WindowBuff *window, uint32_t sequenceNum);
-void slideWindow(WindowBuff *window, uint32_t sequenceNum);
+void slideWindow(WindowBuff *window, uint32_t newLower);
 int windowCheck(WindowBuff *window);
 
 #endif

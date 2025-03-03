@@ -1,0 +1,80 @@
+// 
+// Writen by Victoria Asencio-Clemens, March 2025
+//
+
+#include "WindowLib.h"
+
+WindowBuff createWindow(uint32_t windowLength, uint32_t valueLength){
+    WindowBuff window;
+    window.windowLen = windowLen;
+    window.valueLen = valueLength;
+    window.lower = 0
+    window.upper = window.windowLen - 1;
+    window.current = 0;
+    window.buffer = (WindowVal *)malloc(sizeof(WindowVal) * windowLength);
+    if (!window.buffer) {
+        printf("Buffer allocation failed\n");
+        exit(-1);
+    }
+    for(int i = 0; i < window.windowLen; i++){
+        window.buffer[i].dataLen = 0;
+        window.buffer[i].sequenceNum = 0;
+        window.buffer[i].PDU = NULL;
+    }
+    return window;
+}
+
+void destroyWindow(WindowBuff *window){
+    for(int i = 0; i < window->windowLen; i++){
+        if window->buffer[i].PDU != NULL{
+            free(window->buffer[i]);
+        }
+    }
+    free(window->buffer);
+}
+
+void addVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum){
+    if(!window || !window->buffer) return;
+    uint32_t index = sequenceNum % window->windowLen;
+    if(window->buffer[index].PDU != NULL){
+        free(window->buffer[index]);
+    }
+    window->buffer[index].dataLen = PDUlen - 7;
+    window->buffer[index].sequenceNum = sequenceNum;
+    window->buffer[index].PDU = (uint8_t *)malloc(sizeof(uint8_t) * PDUlen);
+    if (!window.buffer) {
+        printf("Buffer value allocation failed\n");
+        exit(-1);
+    }
+    memcpy(window->buffer[index].PDU, PDU, PDUlen);
+}
+
+WindowVal getVal(WindowBuff *window, uint32_t sequenceNum){
+    if(!window || !window->buffer){
+        printf("Invalid window buffer")
+        exit(-1);
+    }
+    uint32_t index = sequenceNum % window->windowLen;
+    return window->buffer[index];
+}
+
+void slideWindow(WindowBuff *window, uint32_t newLower){
+    if(!window || !window->buffer) return;
+    while(window->lower <= newLower){
+        uint32_t index = window->lower.sequenceNum % window->windowLen;
+        free(window->buffer[index].PDU);
+        window->buffer[index].PDU = NULL;
+        window->buffer[index].dataLen = 0;
+        window->buffer[index].sequenceNum = 0;
+        window->lower++;
+    }
+    window->upper = window->lower + window->windowLen - 1;
+}
+
+int windowCheck(WindowBuff *window){
+    if(!window || !window->buffer){
+        printf("Invalid buffer");
+        exit(-1);
+    }
+    return (window->current >= window->upper);
+}
