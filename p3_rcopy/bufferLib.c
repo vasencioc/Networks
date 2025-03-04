@@ -5,7 +5,7 @@
 #include "bufferLib.h"
 
 /* handle table control functions */
-CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLen){
+CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLength){
     CircularBuff circularBuff;
     circularBuff.bufferLen = bufferLen;
     circularBuff.valueLen = valueLength;
@@ -14,7 +14,7 @@ CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLen){
         printf("Buffer allocation failed\n");
         exit(-1);
     }
-    for(int i = 0; i < window.windowLen; i++){
+    for(uint32_t i = 0; i < circularBuff.bufferLen; i++){
         circularBuff.buffer[i].dataLen = 0;
         circularBuff.buffer[i].sequenceNum = 0;
         circularBuff.buffer[i].validFlag = 0;
@@ -24,23 +24,22 @@ CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLen){
 }
 
 void destroyBuffer(CircularBuff *buffer){
-    for(int i = 0; i < buffer->bufferLen; i++){
-        if(buffer->buffer[i].PDU != NULL){
-            free(buffer->buffer[i].PDU);
+    for(uint32_t i = 0; i < buffer->bufferLen; i++){
+        if(buffer->buffer[i].PDU != NULL) free(buffer->buffer[i].PDU);
     }
-    free(window->buffer);
+    free(buffer->buffer);
 }
 
 void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum){
     if(!buffer || !buffer->buffer) return;
     uint32_t index = sequenceNum % buffer->bufferLen;
     if(buffer->buffer[index].PDU != NULL){
-        free(buffer->buffer[index]);
+        free(buffer->buffer[index].PDU);
     }
     buffer->buffer[index].dataLen = PDUlen - 7;
     buffer->buffer[index].sequenceNum = sequenceNum;
     buffer->buffer[index].PDU = (uint8_t *)malloc(sizeof(uint8_t) * PDUlen);
-    if (!buffer.buffer) {
+    if (!buffer->buffer) {
         printf("Buffer value allocation failed\n");
         exit(-1);
     }
@@ -49,7 +48,7 @@ void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequen
 
 BufferVal getVal(CircularBuff *buffer, uint32_t sequenceNum){
     if(!buffer || !buffer->buffer){
-        printf("Invalid buffer")
+        printf("Invalid buffer");
         exit(-1);
     }
     uint32_t index = sequenceNum % buffer->bufferLen;
@@ -73,9 +72,7 @@ void setInvalid(CircularBuff *buffer, uint32_t sequenceNum){
 }
 
 uint8_t validityCheck(CircularBuff *buffer, uint32_t sequenceNum){
-    if(!buffer || !buffer->buffer){
-        return;
-    }
+    if(!buffer || !buffer->buffer) return -1;
     uint32_t index = sequenceNum % buffer->bufferLen;
     return buffer->buffer[index].validFlag;
 }

@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h> 
 #include <string.h>
+#include <stdio.h>
 
 /* BufferVal: Represents one entry in the circular queue buffer*/
 typedef struct BufferVal{
@@ -22,14 +23,14 @@ typedef struct BufferVal{
 typedef struct CircularBuff{
     uint32_t bufferLen;
     uint32_t valueLen;
-    CircularBuff *buffer;
+    BufferVal *buffer;
 } CircularBuff;
 
 /* handle table control functions */
-CicularBuff createBuffer(uint32_t bufferLen, uint32_t valueLen);
+CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLength);
 void destroyBuffer(CircularBuff *buffer);
-void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t sequenceNum);
-WindowVal getVal(CircularBuff *buffer, uint32_t sequenceNum);
+void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum);
+BufferVal getVal(CircularBuff *buffer, uint32_t sequenceNum);
 void setValid(CircularBuff *buffer, uint32_t sequenceNum);
 void setInvalid(CircularBuff *buffer, uint32_t sequenceNum);
 uint8_t validityCheck(CircularBuff *buffer, uint32_t sequenceNum);
