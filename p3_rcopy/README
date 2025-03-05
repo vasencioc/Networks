@@ -1,1 +1,4 @@
 Victoria Asencio-Clemens, Lab Section: 3pm-6pm
+
+I added a flag for the end of file acknowledgement sent from rcopy (receiver) to the server (sender), with value of 3.
+    Flag = 33 Packet is the EOF responce/acknowledgement (receiver to sender)

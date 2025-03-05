@@ -9,15 +9,26 @@
 #include "windowLib.h"
 #include "PDU.h"
 
+/*** States for FSM ***/
+typedef enum {
+	SETUP,
+	USE,
+	TEARDOWN,
+	END
+} STATE;
+
 /*** Function Prototypes ***/
 void serverControl(int mainServerSocket);
-void processClient(int clientSocket, HandleTable *table);
-/*** Source Code ***/
+void processClient(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint8_t *pdu);
+STATE sendSetup(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, struct pdu PDU, char *fileName, int *fromFD);
+STATE sendLast(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint32_t sequenceNum, uint8_t* lastPayload);
+STATE sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD);
+int checkArgs(int argc, char *argv[]);
 
+/*** Source Code ***/
 int main(int argc, char *argv[]) {
 	int mainServerSocket = 0;   //socket descriptor for the server socket
-	int portNumber = 0;
-	portNumber = checkArgs(argc, argv);
+	int portNumber = checkArgs(argc, argv);
 	//create the server socket
 	mainServerSocket = udpServerSetup(portNumber);
 	//manage server communication
@@ -29,42 +40,118 @@ int main(int argc, char *argv[]) {
 
 /*Main control for polling sockets*/
 void serverControl(int mainServerSocket){
-	//polling set setup
-	setupPollSet();
-	addToPollSet(mainServerSocket);
+	struct sockaddr_in6 client_address;
+	socklen_t client_len = sizeof(client_address);
+    //struct packet recv_pkt;
+    int received;
+	int flags = 0;
 	//control loop
-	while(1){
-		//poll until a socket is ready
-		int readySocket = pollCall(-1);
-		if(readySocket == mainServerSocket){ 
-			addToPollSet(newSocket); //setup client connection
-		}else if(readySocket < 0){
-			perror("poll timeout");
-			exit(1);
+	//while(1){ //ADD BACK WHEN FORKING
+		uint8_t *initialPDU[MAX_PAYLOAD + 7];
+		int pduLen = safeRecv(mainServerSocket, uint8_t * initialPDU, MAX_PDU, flags, (struct sockaddr *)&client_address, &client_len);
+		if(pduLen != 0){ //replace with fork later
+			processClient(mainServerSocket, &client_address, client_len, initialPDU);
 		}
-		else if (readySocket > mainServerSocket) {processClient(readySocket);}
-	}
+	//}
 }
 
 /* Control client communication*/
-void processClient(int clientSocket){
-	uint8_t flag;
-	int messageLen = 0;
-    uint8_t dataBuffer[MAXPACKET];
-	memset(dataBuffer, 0, MAXPACKET);
-	//now get the data from the client_socket
-    messageLen = recvPDU(clientSocket, dataBuffer, MAXPACKET);
-	//check if connection was closed or error
-	if(messageLen > 0){
-		flag = dataBuffer[0];
-		switch(flag) {
-			case(FLAG8): clientLogin(clientSocket, dataBuffer + 1); break;
-			default: break;
+void processClient(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint8_t *pdu){
+	// setup variables for sending data
+	struct pdu *received = (struct pdu *)pdu; //initial pdu
+	uint8_t *EOF[MAX_PAYLOAD]; //final payload
+	char from_filename[MAX_FILENAME + 1]; //add space for null-terminator
+	int fromFD;
+	uint32_t sequenceNum = 0;
+	// setup poll set for sending data
+	setupPollSet();
+	addToPollSet(socketNum);
+	// FSM for flow control
+	STATE presentState = SETUP;
+	while(presentState != END)
+	switch(presentState) {
+		case SETUP: {
+			if(pdu->flag == FLAG_FILE_REQ){
+				presentState = sendSetup(socketNum, clientAddress, clientLen, received, from_filename, fromFD);
+			} else{
+				presentState = TEARDOWN; // maybe not???
+			}
+			break;
 		}
+		case USE: presentState = sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD);
+		case TEARDOWN: presentState = sendLast(socketNum, clientAddress, clientLen, sequenceNum, EOF);
+		case END: break;
+		default: break;
 	}
 	//clean up
-	else {
-		clientClosed(clientSocket);
-		if(getHandle(table, clientSocket)) removeHandle(table, clientSocket);
+	removeFromPollSet(socketNum);
+	clientClosed(socketNum);
+}
+
+STATE sendSetup(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, struct pdu PDU, char *fileName, int *fromFD){
+	STATE nextState;
+	uint8_t response;
+	uint32_t windowSize;
+	uint32_t bufferSize;
+	memcpy(windowSize, pdu->payload[0], 4);
+	memcpy(bufferSize, pdu->payload[4], 2);
+	memcpy(fileName, pdu->payload[6], MAX_FILENAME);
+	fromFD = open(fileName, O_RDONLY); //attempt to open from file as read-only
+	if(fromFD < 0){ // unable to open file
+		nextState = TEARDOWN;
+		response = 0;
+	} else {
+		nextState = USE;
+		response = 1;
 	}
+	char *sendPDU = buildPDU(response, 1, 0, FLAG_FILE_RES);
+	safeSendTo(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen);
+	return nextState;
+}
+
+STATE sendLast(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint8_t* lastPayload){
+	char *sendPDU = buildPDU(lastPayload, 1, sequenceNum, FLAG_EOF);
+	int count = 0;
+	int recvError = 0; //flag for error receiving EOF Ack
+	safeSendTo(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen); //send EOF
+	int fromSocket = poll(1000); //1 sec timer to wait for EOF ack
+	while(fromSocket == -1 && count < 10){
+		count++;
+		safeSendTo(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen); //resend EOF
+		fromSocket = poll(1000); //1 sec timer to wait for EOF ack
+	}
+	if(fromSocket != -1){
+		uint8_t *finalPDU[MAX_PAYLOAD + 7];
+		int pduLen = safeRecv(socketNum, uint8_t * finalPDU, MAX_PDU, flags, (struct sockaddr *)&client_address, &client_len);
+		if(finalPDU[7] != FLAG_EOF_ACK){
+			recvError = 1
+		}
+	}
+	if(recvError || (count > 9)) printf("Error Sending EOF");
+	close(fromFD);
+	return DONE;
+}
+
+STATE sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD){
+	
+}
+
+/*Check command line arguments for proper login*/
+int checkArgs(int argc, char *argv[])
+{
+	// Checks args and returns port number
+	int portNumber = 0;
+
+	if (argc > 7)
+	{
+		fprintf(stderr, "Usage %s [optional port number]\n", argv[0]);
+		exit(1);
+	}
+
+	if (argc == 7)
+	{
+		portNumber = atoi(argv[1]);
+	}
+
+	return portNumber;
 }

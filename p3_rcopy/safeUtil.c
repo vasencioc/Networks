@@ -24,8 +24,8 @@
 #include "networks.h"
 #include "safeUtil.h"
 
-int safeRecvFrom(int socket_num, char* data, int data_len, int flags, struct sockaddr *from_address, int *from_len) {
-    int bytesReceived = recvfrom(socket_num, data, data_len, flags, from_address, (socklen_t *)from_len);
+int safeRecvFrom(int socket_num, char* data, int data_len, int flags, struct sockaddr *from_address, socklen_t *from_len) {
+    int bytesReceived = recvfrom(socket_num, data, data_len, flags, from_address, from_len);
     if (bytesReceived < 0)
     {
         if (errno == ECONNRESET)
@@ -34,7 +34,7 @@ int safeRecvFrom(int socket_num, char* data, int data_len, int flags, struct soc
         }
         else
         {
-            perror("recv call");
+            perror("recvfrom call");
             exit(-1);
         }
     }
