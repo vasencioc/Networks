@@ -8,8 +8,8 @@
 
 #include <stdint.h>
 
-int safeRecv(int socketNum, uint8_t * buffer, int bufferLen, int flag);
-int safeSend(int socketNum, uint8_t * buffer, int bufferLen, int flag);
+int safeRecvFrom(int socket_num, char* data, int data_len, int flags, struct sockaddr *from_address, socklen_t *from_len);
+int safeSendTo(int socket_num, char* data, int data_len, int flags, struct sockaddr *to_address, int to_len);
 
 void * srealloc(void *ptr, size_t size);
 void * sCalloc(size_t nmemb, size_t size);

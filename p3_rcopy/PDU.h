@@ -10,6 +10,7 @@
 #define HEADER_LEN 7
 #define MAX_PAYLOAD 1400
 #define MAX_PDU 1407
+#define MAX_WINDOW 1073741823
 #define RRSREJ_LEN 11
 #define FLAG_RR 5
 #define FLAG_SREJ 6

@@ -64,25 +64,26 @@ void processClient(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t 
 	char from_filename[MAX_FILENAME + 1]; //add space for null-terminator
 	int fromFD;
 	uint32_t sequenceNum = 0;
-	// setup poll set for sending data
+	// setup poll set for receiving data
 	setupPollSet();
 	addToPollSet(socketNum);
 	// FSM for flow control
 	STATE presentState = SETUP;
-	while(presentState != END)
-	switch(presentState) {
-		case SETUP: {
-			if(received->flag == FLAG_FILE_REQ){
-				presentState = sendSetup(socketNum, clientAddress, clientLen, received, from_filename, &fromFD);
-			} else{
-				presentState = END;
+	while(presentState != END){
+		switch(presentState) {
+			case SETUP: {
+				if(received->flag == FLAG_FILE_REQ){
+					presentState = sendSetup(socketNum, clientAddress, clientLen, received, from_filename, &fromFD);
+				} else{
+					presentState = END;
+				}
+				break;
 			}
-			break;
+			case USE: presentState = sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD);
+			case TEARDOWN: presentState = sendLast(socketNum, clientAddress, clientLen, sequenceNum, EOF);
+			case END: break;
+			default: break;
 		}
-		case USE: presentState = sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD);
-		case TEARDOWN: presentState = sendLast(socketNum, clientAddress, clientLen, sequenceNum, EOF);
-		case END: break;
-		default: break;
 	}
 	//clean up
 	removeFromPollSet(socketNum);
@@ -123,8 +124,8 @@ STATE sendLast(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clie
 		fromSocket = poll(1000); //1 sec timer to wait for EOF ack
 	}
 	if(fromSocket != -1){
-		uint8_t finalPDU[MAX_PDU];
-		int pduLen = safeRecvFrom(socketNum, finalPDU, MAX_PDU, flags, (struct sockaddr *)&client_address, &client_len);
+		uint8_t finalPDU[HEADER_LEN];
+		int pduLen = safeRecvFrom(socketNum, finalPDU, HEADER_LEN, 0, (struct sockaddr *)&client_address, &client_len);
 		if(finalPDU[7] != FLAG_EOF_ACK){
 			recvError = 1
 		}
@@ -157,6 +158,7 @@ STATE sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD, bufferL
 				WindowVal *lowest = getVal(window, 0);
 				memcpy(buffer, lowest.PDU[7], lowest.dataLen);
 				uint8_t *pdu = buildPDU(buffer, bufferLen, 0, FLAG_TIMEOUT_RES);
+				safeSendTo(socketNum, pdu, lowest.dataLen + 7, 0, clientAddress, clientLen);
 				//increment count of resends
 				count++;
 				if(count == 10){
