@@ -107,6 +107,7 @@ STATE sendSetup(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t cli
 	}
 	char *sendPDU = buildPDU(response, 1, 0, FLAG_FILE_RES);
 	safeSendTo(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen);
+	//POLL HERE AND SEND 10???????
 	return nextState;
 }
 
