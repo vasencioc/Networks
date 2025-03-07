@@ -2,6 +2,24 @@
 // Writen by Victoria Asencio-Clemens, March 2025
 //
 // PDU creation
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/uio.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+
+#include "gethostbyname.h"
+#include "networks.h"
+#include "safeUtil.h"
 
 #ifndef __PDU_H__
 #define __PDU_H__

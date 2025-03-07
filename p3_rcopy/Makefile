@@ -1,58 +1,43 @@
-# # Makefile for CPE464 tcp test code
-# # written by Hugh Smith - April 2019
-# # modified by Victoria Asencio-Clemens - January 2025
+# Makefile for CPE464 tcp and udp test code
+# updated by Hugh Smith - April 2023
 
-# CC= gcc
-# CFLAGS= -g -Wall -std=gnu99
-# LIBS = 
+# all target makes UDP test code
+# tcpAll target makes the TCP test code
 
-# OBJS = networks.o gethostbyname.o poll.o safeUtil.o chatHelpers.o HandleTable.o
 
-# all:   cclient server
+CC= gcc
+CFLAGS= -g -Wall
+LIBS = 
 
-# cclient: cclient.c $(OBJS)
-# 	$(CC) $(CFLAGS) -o cclient cclient.c  $(OBJS) $(LIBS)
+OBJS = networks.o gethostbyname.o pollLib.o safeUtil.o
 
-# server: server.c $(OBJS)
-# 	$(CC) $(CFLAGS) -o server server.c $(OBJS) $(LIBS)
+#uncomment next two lines if your using sendtoErr() library
+LIBS += libcpe464.2.21.a -lstdc++ -ldl
+#CFLAGS += -D__LIBCPE464_
 
-# .c.o:
-# 	gcc -c $(CFLAGS) $< -o $@ $(LIBS)
 
-# cleano:
-# 	rm -f *.o
+all: udpAll
 
-# clean:
-# 	rm -f server cclient *.o
+udpAll: udpClient udpServer
+tcpAll: myClient myServer
 
-# Builds targets for sorting arrays in parallel.
-# CSC 357, Assignment 7
-# Given code, Winter '24
+udpClient: udpClient.c $(OBJS) 
+	$(CC) $(CFLAGS) -o udpClient udpClient.c $(OBJS) $(LIBS)
 
-CC = gcc
-CFLAGS = -Wall -Wextra -g -std=gnu99
-VALGRIND = valgrind --leak-check=full --show-leak-kinds=all 
+udpServer: udpServer.c $(OBJS) 
+	$(CC) $(CFLAGS) -o udpServer udpServer.c  $(OBJS) $(LIBS)
 
-# Source files
-SRCS = windowLib.c test_window_buffer.c
-OBJS = $(SRCS:.c=.o)
+myClient: myClient.c $(OBJS)
+	$(CC) $(CFLAGS) -o myClient myClient.c  $(OBJS) $(LIBS)
 
-# Output executable
-TARGET = test_window_lib
+myServer: myServer.c $(OBJS)
+	$(CC) $(CFLAGS) -o myServer myServer.c $(OBJS) $(LIBS)
 
-all: $(TARGET)
+.c.o:
+	gcc -c $(CFLAGS) $< -o $@ $(LIBS)
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-run: $(TARGET)
-	./$(TARGET)
-
-valgrind: $(TARGET)
-	$(VALGRIND) ./$(TARGET)
+cleano:
+	rm -f *.o
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f myServer myClient udpClient udpServer *.o
