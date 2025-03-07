@@ -43,7 +43,7 @@ int main (int argc, char *argv[])
 	socketNum = setupUdpClientToServer(&server, argv[6], portNumber);
 	int toFD = checkConfig(socketNum, argv[1], argv[2], atoi(argv[3]), atoi(argv[4]));
 	if(toFD < 0){ // unable to open file
-		printf("Error on open of output file: %s.", argv[2]);
+		printf("Error on open of output file: %s\n", argv[2]);
 	} else {
 		clientControl(argv[1], toFD, atoi(argv[3]), atoi(argv[4]), socketNum, &server);
 	}
@@ -135,7 +135,7 @@ STATE transferReply(int socketNum, struct sockaddr *server, uint32_t *requestCou
 			if(received->payload){//received file Ack
 				return IN_ORDER;
 			} else { //received file Nack
-				printf("Error: file %s not found", from_filename);
+				printf("Error: file %s not found\n", from_filename);
 				return END;
 			}
 		}

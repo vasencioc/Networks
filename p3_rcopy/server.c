@@ -18,8 +18,7 @@ typedef enum {
 void handleZombies(int sig);
 void processClient(double error_rate, int mainServerSocket);
 void fileTransfer(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen, uint8_t *pdu);
-(socketNum, (struct sockaddr *)&clientAddress, clientLen, *received, from_filename, &fromFD, &bufferLen)
-STATE sendSetup(int socketNum, struct sockaddr *clientAddress, int clientLen, struct pdu PDU, char *file_name, uint32_t *seqNum, char *fileName,int *fromFD, uint16_t *bufferLen);
+STATE sendSetup(int socketNum, struct sockaddr *clientAddress, struct pdu PDU, int clientLen, uint32_t *seqNum, char *fileName,int *fromFD, uint16_t *bufferLen);
 STATE sendEOF(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t* seqNum);
 STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *sequenceNum, int fromFD, uint16_t bufferLen);
 void processRRSREJ(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *RRnum);
@@ -86,7 +85,7 @@ void fileTransfer(int mainServerSocket, struct sockaddr_in6 *clientAddress, int 
 	}
 	// setup variables for sending data
 	struct pdu *received = (struct pdu *)pdu; //initial pdu
-	char from_filename[MAX_FILENAME + 1]; //add space for null-terminator
+	char *from_filename[MAX_FILENAME + 1]; //add space for null-terminator
 	int fromFD;
 	uint32_t sequenceNum = 0;
 	uint16_t bufferLen = 0;
@@ -99,7 +98,7 @@ void fileTransfer(int mainServerSocket, struct sockaddr_in6 *clientAddress, int 
 		switch(presentState) {
 			case SETUP: {
 				if(received->flag == FLAG_FILE_REQ){
-					presentState = sendSetup(socketNum, (struct sockaddr *)&clientAddress, clientLen, *received, from_filename, &fromFD, &bufferLen);
+					presentState = sendSetup(socketNum, (struct sockaddr *)&clientAddress, *received, clientLen, &sequenceNum, *from_filename, &fromFD, &bufferLen);
 				} else{
 					presentState = END;
 				}
@@ -117,7 +116,7 @@ void fileTransfer(int mainServerSocket, struct sockaddr_in6 *clientAddress, int 
 	close(fromFD);
 }
 
-STATE sendSetup(int socketNum, struct sockaddr *clientAddress, int clientLen, struct pdu PDU, uint32_t *seqNum, char *fileName, int *fromFD){
+STATE sendSetup(int socketNum, struct sockaddr *clientAddress, struct pdu PDU, int clientLen, uint32_t *seqNum, char *fileName,int *fromFD, uint16_t *bufferLen){
 	STATE nextState;
 	uint8_t response;
 	uint32_t windowSize;
@@ -133,7 +132,7 @@ STATE sendSetup(int socketNum, struct sockaddr *clientAddress, int clientLen, st
 		nextState = USE;
 		response = 1;
 	}
-	uint8_t *sendPDU = buildPDU((uint8_t *)response, 1, *seqNum, FLAG_FILE_RES);
+	uint8_t *sendPDU = buildPDU(&response, 1, *seqNum, FLAG_FILE_RES);
 	safeSendto(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen);
 	(*seqNum)++;
 	return nextState;
@@ -141,7 +140,7 @@ STATE sendSetup(int socketNum, struct sockaddr *clientAddress, int clientLen, st
 
 STATE sendEOF(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t* seqNum){
 	uint8_t placeholder = 0;
-	uint8_t *EOFpacket = buildPDU(&placeholder, 1, seqNum, FLAG_EOF);
+	uint8_t *EOFpacket = buildPDU(&placeholder, 1, *seqNum, FLAG_EOF);
 	int count = 0;
 	while(count < 10){
 		safeSendto(socketNum, EOFpacket, sizeof(EOF), 0, clientAddress, clientLen); //send EOF
@@ -184,7 +183,7 @@ STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uin
 				break;
 			}
 			uint8_t *pdu = buildPDU(*buffer, bufferLen, *sequenceNum, FLAG_DATA); //create PDU
-			addWinVal(window, pdu, lenRead + 7, sequenceNum); //store PDU
+			addWinVal(window, pdu, lenRead + 7, *sequenceNum); //store PDU
 			safeSendto(socketNum, pdu, lenRead + 7, 0, clientAddress, clientLen); //send data
 			while(pollCall(0)){
 				processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
@@ -196,10 +195,10 @@ STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uin
 				processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
 			} else{
 				//resend lowest packet
-				WindowVal *lowest = getWinVal(window, window->lower);
+				WindowVal lowest = getWinVal(window, window->lower);
 				uint8_t *resend[lowest.dataLen + 7];
-				memcpy(resend, lowest->PDU, lowest->dataLen + 7);
-				safeSendto(socketNum, resend, lowest->dataLen + 7, 0, clientAddress, clientLen);
+				memcpy(resend, lowest.PDU, lowest.dataLen + 7);
+				safeSendto(socketNum, resend, lowest.dataLen + 7, 0, clientAddress, clientLen);
 				//increment count of resends
 				count++;
 				if(count == 10){
@@ -218,10 +217,10 @@ STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uin
 			return END;
 		} else{
 			//resend lowest packet
-			WindowVal *lowest = getWinVal(window, window->lower);
-			uint8_t *resend[lowest.dataLen + 7];
-			memcpy(resend, lowest->PDU, lowest->dataLen + 7);
-			safeSendto(socketNum, resend, lowest->dataLen + 7, 0, clientAddress, clientLen);
+			WindowVal lowest = getWinVal(window, window->lower);
+			uint8_t resend[lowest.dataLen + 7];
+			memcpy(resend, lowest.PDU, lowest.dataLen + 7);
+			safeSendto(socketNum, resend, lowest.dataLen + 7, 0, clientAddress, clientLen);
 			count++;
 		}
 	}
@@ -230,14 +229,14 @@ STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uin
 
 void processRRSREJ(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *RRnum){
 	uint8_t *pdu[RRSREJ_LEN];
-	int pduLen = safeRecvfrom(socketNum, pdu, RRSREJ_LEN, 0, clientAddress, &clientLen);
+	safeRecvfrom(socketNum, pdu, RRSREJ_LEN, 0, clientAddress, &clientLen);
 	if (in_cksum((uint16_t *) pdu, RRSREJ_LEN) == 0) { 
 		struct pdu *received = (struct pdu *)pdu;
 		uint32_t seqNumResponse;
-		memcpy(seqNumResponse, received->payload + 7, 4);
+		memcpy(&seqNumResponse, received->payload + 7, 4);
 		if(received->flag == FLAG_RR){
-			RRnum= ntohl(seqNumResponse);
-			slideWindow(window, RRnum);
+			*RRnum= ntohl(seqNumResponse);
+			slideWindow(window, *RRnum);
 		} else if(received->flag == FLAG_SREJ){
 			//resend rejected pdu
 			WindowVal SREJval = getWinVal(window, seqNumResponse);
@@ -260,7 +259,7 @@ int checkArgs(int argc, char *argv[])
 
 	if (argc == 3)
 	{
-		portNumber = atoi(argv[1]);
+		portNumber = atoi(argv[2]);
 	}
 
 	return portNumber;
