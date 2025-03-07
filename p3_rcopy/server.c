@@ -3,9 +3,6 @@
 //
 // Server setup and control for rcopy
 
-#include "poll.h"
-#include "networks.h"
-#include "safeUtil.h"
 #include "windowLib.h"
 #include "PDU.h"
 
@@ -18,12 +15,14 @@ typedef enum {
 } STATE;
 
 /*** Function Prototypes ***/
-void processClient(int mainServerSocket);
-void fileTransfer(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint8_t *pdu);
-STATE sendSetup(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, struct pdu PDU, char *fileName, int *fromFD);
-STATE sendEOF(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint32_t* seqNum);
-STATE sendData(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint32_t sequenceNum, int *fromFD);
-void processRRSREJ(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen);
+void handleZombies(int sig);
+void processClient(double error_rate, int mainServerSocket);
+void fileTransfer(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen, uint8_t *pdu);
+(socketNum, (struct sockaddr *)&clientAddress, clientLen, *received, from_filename, &fromFD, &bufferLen)
+STATE sendSetup(int socketNum, struct sockaddr *clientAddress, int clientLen, struct pdu PDU, char *file_name, uint32_t *seqNum, char *fileName,int *fromFD, uint16_t *bufferLen);
+STATE sendEOF(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t* seqNum);
+STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *sequenceNum, int fromFD, uint16_t bufferLen);
+void processRRSREJ(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *RRnum);
 int checkArgs(int argc, char *argv[]);
 
 /*** Source Code ***/
@@ -34,12 +33,14 @@ int main ( int argc, char *argv[]  )
 { 
 	int socketNum = 0;				
 	int portNumber = 0;
-
 	portNumber = checkArgs(argc, argv);
-		
+	double error_rate = atof(argv[1]);
+
+	handleZombies(SIGCHLD);
+
 	socketNum = udpServerSetup(portNumber);
 
-	processClient(socketNum);
+	processClient(error_rate, socketNum);
 
 	close(socketNum);
 	
@@ -53,29 +54,42 @@ void handleZombies(int sig) {
 }
 
 /*Main control for polling sockets*/
-void processClient(int mainServerSocket){
+void processClient(double error_rate, int mainServerSocket){
 	int dataLen = 0; 
-	char buffer[MAX_PDU];	  
+	uint8_t buffer[MAX_PDU];	  
 	struct sockaddr_in6 client;		
 	int clientAddrLen = sizeof(client);
 	buffer[0] = '\0';
+	pid_t pid = 0;
 	//control loop
-	//while(1){ //ADD BACK WHEN FORKING
-	    dataLen = safeRecvfrom(mainServerSocket, buffer, MAXBUF, 0, (struct sockaddr *) &client, &clientAddrLen);
-		if(dataLen != 0){ //replace with fork later
-			fileTransfer(mainServerSocket, &client_address, client_len, initialPDU);
+	while(1){
+	    dataLen = safeRecvfrom(mainServerSocket, buffer, MAX_PDU, 0, (struct sockaddr *)&client, &clientAddrLen);
+		if(in_cksum((uint16_t *)buffer, dataLen) == 0){ 
+			if((pid = fork()) == 0){ //child process
+				sendtoErr_init(error_rate, DROP_ON, FLIP_ON, DEBUG_ON, RSEED_ON);
+				fileTransfer(mainServerSocket, &client, clientAddrLen, buffer);
+				exit(0);
+			}
 		}
-	//}
+	}
 }
 
 /* Control client communication*/
-void fileTransfer(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint8_t *pdu){
-	window = createWindow(windowLen, bufferLen);
+void fileTransfer(int mainServerSocket, struct sockaddr_in6 *clientAddress, int clientLen, uint8_t *pdu){
+	close(mainServerSocket);
+	int socketNum = 0;
+	// create new socket
+	if ((socketNum = socket(AF_INET6,SOCK_DGRAM,0)) < 0)
+	{
+		perror("socket() call error");
+		exit(-1);
+	}
 	// setup variables for sending data
 	struct pdu *received = (struct pdu *)pdu; //initial pdu
 	char from_filename[MAX_FILENAME + 1]; //add space for null-terminator
 	int fromFD;
 	uint32_t sequenceNum = 0;
+	uint16_t bufferLen = 0;
 	// setup poll set for receiving data
 	setupPollSet();
 	addToPollSet(socketNum);
@@ -85,14 +99,14 @@ void fileTransfer(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t c
 		switch(presentState) {
 			case SETUP: {
 				if(received->flag == FLAG_FILE_REQ){
-					presentState = sendSetup(socketNum, clientAddress, clientLen, received, from_filename, &fromFD);
+					presentState = sendSetup(socketNum, (struct sockaddr *)&clientAddress, clientLen, *received, from_filename, &fromFD, &bufferLen);
 				} else{
 					presentState = END;
 				}
 				break;
-			}
-			case USE: presentState = sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD);
-			case TEARDOWN: presentState = sendEOF(socketNum, clientAddress, clientLen, &sequenceNum);
+			}								
+			case USE: presentState = sendData(socketNum, (struct sockaddr *)&clientAddress, clientLen, &sequenceNum, fromFD, bufferLen);
+			case TEARDOWN: presentState = sendEOF(socketNum, (struct sockaddr *)&clientAddress, clientLen, &sequenceNum);
 			case END: break;
 			default: break;
 		}
@@ -101,18 +115,17 @@ void fileTransfer(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t c
 	destroyWindow(window);
 	removeFromPollSet(socketNum);
 	close(fromFD);
-	clientClosed(socketNum);
 }
 
-STATE sendSetup(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, struct pdu PDU, uint32_t *seqNum char *fileName, int *fromFD){
+STATE sendSetup(int socketNum, struct sockaddr *clientAddress, int clientLen, struct pdu PDU, uint32_t *seqNum, char *fileName, int *fromFD){
 	STATE nextState;
 	uint8_t response;
 	uint32_t windowSize;
-	uint32_t bufferSize;
-	memcpy(windowSize, PDU.payload[0], 4);
-	memcpy(bufferSize, PDU.payload[4], 2);
-	memcpy(fileName, PDU.payload[6], MAX_FILENAME);
-	fromFD = open(fileName, O_RDONLY); //attempt to open from file as read-only
+	memcpy(&windowSize, PDU.payload, 4);
+	memcpy(bufferLen, PDU.payload + 4, 2);
+	memcpy(fileName, PDU.payload + 6, MAX_FILENAME);
+	window = createWindow(windowSize, *bufferLen);
+	*fromFD = open(fileName, O_RDONLY); //attempt to open from file as read-only
 	if(fromFD < 0){ // unable to open file
 		nextState = END;
 		response = 0;
@@ -120,45 +133,45 @@ STATE sendSetup(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t cli
 		nextState = USE;
 		response = 1;
 	}
-	char *sendPDU = buildPDU(response, 1, *seqNum, FLAG_FILE_RES);
-	safeSendTo(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen);
-	(*sequenceNum)++;
+	uint8_t *sendPDU = buildPDU((uint8_t *)response, 1, *seqNum, FLAG_FILE_RES);
+	safeSendto(socketNum, sendPDU, sizeof(sendPDU), 0, clientAddress, clientLen);
+	(*seqNum)++;
 	return nextState;
 }
 
-STATE sendEOF(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint32_t* seqNum){
+STATE sendEOF(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t* seqNum){
 	uint8_t placeholder = 0;
-	uint8_t *EOF = buildPDU(placeholder, 1, seqNum, FLAG_EOF);
+	uint8_t *EOFpacket = buildPDU(&placeholder, 1, seqNum, FLAG_EOF);
 	int count = 0;
-	int fromSocket;
 	while(count < 10){
-		safeSendTo(socketNum, EOF, sizeof(EOF), 0, clientAddress, clientLen); //send EOF
-		if(int fromSocket = poll(1000)){ //1 sec timer to wait for EOF ack
+		safeSendto(socketNum, EOFpacket, sizeof(EOF), 0, clientAddress, clientLen); //send EOF
+		if(pollCall(1000)){ //1 sec timer to wait for EOF ack
 			uint8_t EOFack[HEADER_LEN + 1];
-			int pduLen = safeRecvFrom(socketNum, EOFack, HEADER_LEN + 1, 0, (struct sockaddr *)&client_address, &client_len);
+			int pduLen = safeRecvfrom(socketNum, EOFack, HEADER_LEN + 1, 0, clientAddress, &clientLen);
 			if (in_cksum((uint16_t *) EOFack, pduLen) == 0) {
-				if (finalPDU[7] != FLAG_EOF_ACK) { //PROGRAM FINISH
-					uint8_t *close = buildPDU(placeholder, 1, seqNum, FLAG_EOF_ACK);
-					safeSendto(socketNum, close, sizeof(close), 0, clientAddress, clientLen); //send final ACK
+				if (EOFack[7] == FLAG_EOF_ACK) { 
+					//uint8_t *close = buildPDU(placeholder, 1, seqNum, FLAG_EOF_ACK);
+					//safeSendto(socketNum, close, sizeof(close), 0, clientAddress, clientLen); //send final ACK
 					return END;
 				}
 			}
 		}
 		count++;
 	}
-	if(fromSocket){
-		uint8_t finalPDU[HEADER_LEN];
-		int pduLen = safeRecvFrom(socketNum, finalPDU, HEADER_LEN, 0, (struct sockaddr *)&client_address, &client_len);
-		if(finalPDU[7] != FLAG_EOF_ACK){
-			recvError = 1
-		}
-	}
+	// if(fromSocket){
+	// 	uint8_t finalPDU[HEADER_LEN];
+	// 	int pduLen = safeRecvfrom(socketNum, finalPDU, HEADER_LEN, 0, (struct sockaddr *)&client_address, &client_len);
+	// 	if(finalPDU[7] != FLAG_EOF_ACK){
+	// 		recvError = 1
+	// 	}
+	// }
 	printf("Error Sending EOF");
 	return END;
 }
 
-STATE sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD, bufferLen, windowLen){
+STATE sendData(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *sequenceNum, int fromFD, uint16_t bufferLen){
 	int reachedEnd = 0; //flag for end of file
+	uint32_t count;
 	uint32_t trackSeqNum = 0;
 	uint32_t lastSeqNum = 0;
 	uint8_t *buffer[bufferLen];
@@ -170,23 +183,23 @@ STATE sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD, bufferL
 				reachedEnd = 1;
 				break;
 			}
-			uint8_t *pdu = buildPDU(buffer, bufferLen, sequenceNum, FLAG_DATA); //create PDU
-			addVal(window, pdu, lenRead + 7, sequenceNum); //store PDU
-			safeSendTo(socketNum, pdu, lenRead + 7, 0, clientAddress, clientLen); //send data
+			uint8_t *pdu = buildPDU(*buffer, bufferLen, *sequenceNum, FLAG_DATA); //create PDU
+			addWinVal(window, pdu, lenRead + 7, sequenceNum); //store PDU
+			safeSendto(socketNum, pdu, lenRead + 7, 0, clientAddress, clientLen); //send data
 			while(pollCall(0)){
 				processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
 			}
 		}
-		uint32_t count = 0;
+		count = 0;
 		while(windowCheck(window)){ //window closed
 			if(pollCall(1000)){
 				processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
 			} else{
 				//resend lowest packet
-				WindowVal *lowest = getVal(window, window->lower);
+				WindowVal *lowest = getWinVal(window, window->lower);
 				uint8_t *resend[lowest.dataLen + 7];
-				memcpy(resend, lowest.PDU, lowest.dataLen + 7);
-				safeSendTo(socketNum, resend, lowest.dataLen + 7, 0, clientAddress, clientLen);
+				memcpy(resend, lowest->PDU, lowest->dataLen + 7);
+				safeSendto(socketNum, resend, lowest->dataLen + 7, 0, clientAddress, clientLen);
 				//increment count of resends
 				count++;
 				if(count == 10){
@@ -196,22 +209,39 @@ STATE sendData(socketNum, clientAddress, clientLen, sequenceNum, fromFD, bufferL
 			}
 		}
 	}
+	count = 0;//reset count 
+	while(trackSeqNum != lastSeqNum){
+		if(pollCall(1000)){
+			processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
+		} else if(count == 10){
+			printf("Client Closed\n");
+			return END;
+		} else{
+			//resend lowest packet
+			WindowVal *lowest = getWinVal(window, window->lower);
+			uint8_t *resend[lowest.dataLen + 7];
+			memcpy(resend, lowest->PDU, lowest->dataLen + 7);
+			safeSendto(socketNum, resend, lowest->dataLen + 7, 0, clientAddress, clientLen);
+			count++;
+		}
+	}
+	return TEARDOWN;
 }
 
-void processRRSREJ(int socketNum, struct sockaddr_in6 *clientAddress, socklen_t clientLen, uint32_t *RRnum){
+void processRRSREJ(int socketNum, struct sockaddr *clientAddress, int clientLen, uint32_t *RRnum){
 	uint8_t *pdu[RRSREJ_LEN];
-	int pduLen = safeRecvFrom(sockerNum, pdu, RRSREJ_LEN, 0, clientAddress, clientLen);
+	int pduLen = safeRecvfrom(socketNum, pdu, RRSREJ_LEN, 0, clientAddress, &clientLen);
 	if (in_cksum((uint16_t *) pdu, RRSREJ_LEN) == 0) { 
 		struct pdu *received = (struct pdu *)pdu;
 		uint32_t seqNumResponse;
-		memcpy(seqNumResponse, received.payload + 7, 4);
-		if(received.flag == FLAG_RR){
+		memcpy(seqNumResponse, received->payload + 7, 4);
+		if(received->flag == FLAG_RR){
 			RRnum= ntohl(seqNumResponse);
 			slideWindow(window, RRnum);
-		} else if(received.flag == FLAG_SREJ){
+		} else if(received->flag == FLAG_SREJ){
 			//resend rejected pdu
-			WindowVal SREJval = getVal(window, seqNumResponse);
-			safeSendTo(socketNum, SREJval.PDU, SREJval.dataLen + 7, 0, clientAddress, clientLen); //send data
+			WindowVal SREJval = getWinVal(window, seqNumResponse);
+			safeSendto(socketNum, SREJval.PDU, SREJval.dataLen + 7, 0, clientAddress, clientLen); //send data
 		}
 	}
 }
@@ -222,13 +252,13 @@ int checkArgs(int argc, char *argv[])
 	// Checks args and returns port number
 	int portNumber = 0;
 
-	if (argc > 2)
+	if (argc > 3)
 	{
 		fprintf(stderr, "Usage %s [optional port number]\n", argv[0]);
 		exit(1);
 	}
 
-	if (argc == 2)
+	if (argc == 3)
 	{
 		portNumber = atoi(argv[1]);
 	}

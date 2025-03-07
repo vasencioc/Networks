@@ -27,10 +27,10 @@ typedef struct CircularBuff{
 } CircularBuff;
 
 /* handle table control functions */
-CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLength);
+CircularBuff *createBuffer(uint32_t bufferLen, uint32_t valueLength);
 void destroyBuffer(CircularBuff *buffer);
-void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum);
-BufferVal getVal(CircularBuff *buffer, uint32_t sequenceNum);
+void addBuffVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum);
+BufferVal getBuffVal(CircularBuff *buffer, uint32_t sequenceNum);
 void setValid(CircularBuff *buffer, uint32_t sequenceNum);
 void setInvalid(CircularBuff *buffer, uint32_t sequenceNum);
 uint8_t validityCheck(CircularBuff *buffer, uint32_t sequenceNum);

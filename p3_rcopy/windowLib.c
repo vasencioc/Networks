@@ -4,34 +4,36 @@
 
 #include "windowLib.h"
 
-WindowBuff createWindow(uint32_t windowLength, uint32_t valueLength){
-    WindowBuff window;
-    window.windowLen = windowLength;
-    window.valueLen = valueLength;
-    window.lower = 0;
-    window.upper = window.windowLen - 1;
-    window.current = 0;
-    window.buffer = (WindowVal *)malloc(sizeof(WindowVal) * windowLength);
-    if (!window.buffer) {
+WindowBuff *createWindow(uint32_t windowLength, uint32_t valueLength){
+    uint32_t i;
+    WindowBuff *window = malloc(sizeof(WindowBuff));
+    window->windowLen = windowLength;
+    window->valueLen = valueLength;
+    window->lower = 0;
+    window->upper = window->windowLen - 1;
+    window->current = 0;
+    window->buffer = (WindowVal *)malloc(sizeof(WindowVal) * windowLength);
+    if (!window->buffer) {
         printf("Buffer allocation failed\n");
         exit(-1);
     }
-    for(uint32_t i = 0; i < window.windowLen; i++){
-        window.buffer[i].dataLen = 0;
-        window.buffer[i].sequenceNum = 0;
-        window.buffer[i].PDU = NULL;
+    for(i = 0; i < window->windowLen; i++){
+        window->buffer[i].dataLen = 0;
+        window->buffer[i].sequenceNum = 0;
+        window->buffer[i].PDU = NULL;
     }
     return window;
 }
 
 void destroyWindow(WindowBuff *window){
-    for(uint32_t i = 0; i < window->windowLen; i++){
+    uint32_t i;
+    for(i = 0; i < window->windowLen; i++){
         if(window->buffer[i].PDU != NULL) free(window->buffer[i].PDU);
     }
     free(window->buffer);
 }
 
-void addVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum){
+void addWinVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum){
     if(!window || !window->buffer) return;
     uint32_t index = sequenceNum % window->windowLen;
     if(window->buffer[index].PDU != NULL){
@@ -47,7 +49,7 @@ void addVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequence
     memcpy(window->buffer[index].PDU, PDU, PDUlen);
 }
 
-WindowVal getVal(WindowBuff *window, uint32_t sequenceNum){
+WindowVal getWinVal(WindowBuff *window, uint32_t sequenceNum){
     if(!window || !window->buffer){
         printf("Invalid window buffer");
         exit(-1);

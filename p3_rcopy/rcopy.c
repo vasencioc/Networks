@@ -2,18 +2,13 @@
 // Writen by Victoria Asencio-Clemens, March 2025
 //
 // Client setup and control for rcopy
-
-#include "networks.h"
-#include "safeUtil.h"
-#include "poll.h"
-#include "networks.h"
-#include "safeUtil.h"
 #include "bufferLib.h"
 #include "PDU.h"
 
 /*** States for FSM ***/
 typedef enum {
-	SETUP,
+	SETUP_REQ,
+	SETUP_REPLY,
 	IN_ORDER,
 	BUFFERING,
 	FLUSHING,
@@ -21,14 +16,18 @@ typedef enum {
 	END
 } STATE;
 
-int checkConfig(char * fromFile, int toFD, uint32_t windowSize, uint32_t bufferSize);
-STATE transferRequest(int socketNum, uint32_t windowSize, uint32_t bufferSize, char *from_filename, struct sockaddr *serverAddress, uint32_t *seqNum, uint8_t *reqCount);
-void clientControl(char *fromFile, int toFD, uint32_t windowSize, uint32_t buffSize, int socketNum, struct sockaddr_in6 serverAddress);
-STATE receiveSetup(int socketNum, uint32_t windowSize, uint32_t bufferSize, char *from_filename, struct sockaddr *serverAddress, int addressLen);
-STATE receiveData(int socketNum, struct sockaddr* serverAddress, int buffSize, int expectedSeqNum, int highestSeqNum, int sequenceNum);
-STATE sendEOFack(uint32_t sequenceNum, int toFD, struct sockaddr *serverAddress, int addressLen);
-void sendRRSREJ(int socketNum, struct sockaddr* serverAddress, int sequenceNum, int expected, int flag);
-STATE bufferData(socketNum, serverAddress, toFD, buffSize, expected);
+int checkConfig(int socketNum, char * fromFile, char * toFile, uint32_t windowSize, uint32_t bufferSize);
+void clientControl(char *fromFile, int toFD, uint32_t windowSize, uint16_t buffSize, int socketNum, struct sockaddr_in6 * server);
+STATE transferRequest(int socketNum, uint32_t windowSize, uint32_t bufferSize, char *from_filename, struct sockaddr *serverAddress, uint32_t *seqNum, uint32_t *reqCount);
+STATE transferReply(int socketNum, struct sockaddr *server, uint32_t *requestCount, char *fromFile, int *addrLen);
+//STATE receiveSetup(int socketNum, uint32_t windowSize, uint32_t bufferSize, char *from_filename, struct sockaddr *serverAddress, int addressLen);
+STATE receiveData(int socketNum, struct sockaddr* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen);
+STATE sendEOFack(int socketNum, uint32_t *sequenceNum, int toFD, struct sockaddr *serverAddress, int *addrLen);
+STATE flushData(int socketNum, struct sockaddr* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum);
+void sendRRSREJ(int socketNum, struct sockaddr* serverAddress, uint32_t *sequenceNum, uint32_t *expected, int flag);
+STATE bufferData(int socketNum, struct sockaddr* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen);
+int timer();
+int checkArgs(int argc, char * argv[]);
 
 /*** Source Code ***/
 CircularBuff* packetBuff;
@@ -40,21 +39,20 @@ int main (int argc, char *argv[])
 	int portNumber = 0;
 	
 	portNumber = checkArgs(argc, argv);
-	
+	sendtoErr_init(atof(argv[5]), DROP_ON, FLIP_ON, DEBUG_ON, RSEED_ON);
 	socketNum = setupUdpClientToServer(&server, argv[6], portNumber);
-	
-	int toFD = checkConfig(argv[1], arv[2], atoi(argv[3]), atoi(argv[4]));
+	int toFD = checkConfig(socketNum, argv[1], argv[2], atoi(argv[3]), atoi(argv[4]));
 	if(toFD < 0){ // unable to open file
-		print("Error on open of output file: %s.", argv[2]);
+		printf("Error on open of output file: %s.", argv[2]);
 	} else {
-		clientControl(argv[1], toFD, atoi(argv[3]), atoi(argv[4]), socketNum, serverAddress);
+		clientControl(argv[1], toFD, atoi(argv[3]), atoi(argv[4]), socketNum, &server);
 	}
 	close(socketNum);
 
 	return 0;
 }
 
-int checkConfig(char * fromFile, char * toFile, uint32_t windowSize, uint32_t bufferSize){
+int checkConfig(int socketNum, char * fromFile, char * toFile, uint32_t windowSize, uint32_t bufferSize){
 	if(strlen(fromFile) > MAX_FILENAME){
 		printf("Invalid handle, handle longer than 100 characters: %s\n", fromFile);
 		close(socketNum);
@@ -63,7 +61,7 @@ int checkConfig(char * fromFile, char * toFile, uint32_t windowSize, uint32_t bu
 		printf("Invalid window size\n");
 		close(socketNum);
 		exit(-1);
-	}else if((bufferSize > MAX_BUFFER) || (bufferSize <= 0)){
+	}else if((bufferSize > MAX_PDU) || (bufferSize <= 0)){
 		printf("Invalid buffer size\n");
 		close(socketNum);
 		exit(-1);
@@ -72,26 +70,27 @@ int checkConfig(char * fromFile, char * toFile, uint32_t windowSize, uint32_t bu
 }
 
 /*Controls client communication to/from server*/
-void clientControl(char *fromFile, int toFD, uint32_t windowSize, uint32_t buffSize, int socketNum, struct sockaddr_in6 * server){
+void clientControl(char *fromFile, int toFD, uint32_t windowSize, uint16_t buffSize, int socketNum, struct sockaddr_in6 * server){
 	// setup variables for sending data
 	packetBuff = createBuffer(windowSize, buffSize);
 	uint32_t sequenceNum = 0;
 	uint32_t expected = 0;
 	uint32_t highest = 0;
 	uint32_t requestCount = 0;
+	int serverLen = sizeof(struct sockaddr_in6);
 	// setup poll set for receiving data
 	setupPollSet();
 	addToPollSet(socketNum);
 	// FSM for flow control
-	STATE presentState = SETUP;
+	STATE presentState = SETUP_REQ;
 	while(presentState != END){
 		switch(presentState) {
-			case(SETUP_REQ): presentState = transferRequest(socketNum, windowSize, buffSize, fromFile, server, &sequenceNum, &requestCount); break;
-			case(SETUP_REPLY): presentState = transferReply(socketNum, server, &requestCount)
-			case(IN_ORDER): presentState = receiveData(socketNum, server, toFD, buffSize, expected, sequenceNum); break;
-			case(BUFFERING): presentState = bufferData(socketNum, server, toFD, buffSize, expected); break;
-			case(FLUSHING): presentState = flushData(socketNum, server, toFD, buffSize, expected, highest, sequenceNum); break;
-			case(TEARDOWN): presentState = sendEOFack(sequenceNum, toFD, server); break;
+			case(SETUP_REQ): presentState = transferRequest(socketNum, windowSize, buffSize, fromFile, (struct sockaddr *)&server, &sequenceNum, &requestCount); break;
+			case(SETUP_REPLY): presentState = transferReply(socketNum, (struct sockaddr *)&server, &requestCount, fromFile, &serverLen); break;
+			case(IN_ORDER): presentState = receiveData(socketNum, (struct sockaddr *)&server, toFD, buffSize, &expected, &highest, &sequenceNum, &serverLen); break;
+			case(BUFFERING): presentState = bufferData(socketNum, (struct sockaddr *)&server, toFD, buffSize, &expected, &highest, &sequenceNum, &serverLen); break;
+			case(FLUSHING): presentState = flushData(socketNum, (struct sockaddr *)&server, toFD, buffSize, &expected, &highest, &sequenceNum); break;
+			case(TEARDOWN): presentState = sendEOFack(socketNum, &sequenceNum, toFD, (struct sockaddr *)&server, & serverLen); break;
 			case(END): break;
 			default: break;
 		}
@@ -100,29 +99,28 @@ void clientControl(char *fromFile, int toFD, uint32_t windowSize, uint32_t buffS
 	destroyBuffer(packetBuff);
 	close(toFD);
 	removeFromPollSet(socketNum);
-	clientClosed(socketNum);
 }
 
-STATE transferRequest(int socketNum, uint32_t windowSize, uint32_t bufferSize, char *from_filename, struct sockaddr *serverAddress, uint32_t *seqNum, uint8_t *reqCount){
+STATE transferRequest(int socketNum, uint32_t windowSize, uint32_t bufferSize, char *from_filename, struct sockaddr *serverAddress, uint32_t *seqNum, uint32_t *reqCount){
 	int addressLen = sizeof(struct sockaddr_in6);
-	uint32_t dataLen = strlen(fromFile) + 7; //add space for null term, buffer and window length
+	uint32_t dataLen = strlen(from_filename) + 7; //add space for null term, buffer and window length
 	uint8_t data[dataLen];
 	memcpy(data, &windowSize, 4);
 	memcpy(data + 4, &bufferSize, 2);
-	memcpy(data + 6, from_filename, sizeof(from_filename));
+	memcpy(data + 6, from_filename, strlen(from_filename) + 1);
 	data[dataLen] = '\0';
 	uint8_t *filePDU = buildPDU(data, dataLen, 0, FLAG_FILE_REQ); //build filename PDU
-	safeSendTo(socketNum, filePDU, dataLen + HEADER_LEN, 0, serverAddress, addressLen);
-	(*sequenceNum)++;
+	safeSendto(socketNum, filePDU, dataLen + HEADER_LEN, 0, serverAddress, addressLen);
+	(*seqNum)++;
 	(*reqCount)++;
 	return SETUP_REPLY;
 }
 
-STATE transferReply(socketNum, server, &requestCount){
+STATE transferReply(int socketNum, struct sockaddr *server, uint32_t *requestCount, char *from_filename, int *addrLen){
 	if(pollCall(1000)){
 		uint8_t *pduBuff[MAX_PDU];
-		int pduLen = safeRecvFrom(socketNum, pduBuff, MAX_PDU, 0, serverAddress, addressLen);
-		if (in_cksum(uint16_t *) pduBuff, pduLen != 0) {
+		int pduLen = safeRecvfrom(socketNum, pduBuff, MAX_PDU, 0, server, addrLen);
+		if (in_cksum((uint16_t *) pduBuff, pduLen != 0)) {
 			(*requestCount)--;
 			if (*requestCount > 9) { //no more tries
 				printf("Server closed\n");
@@ -134,82 +132,84 @@ STATE transferReply(socketNum, server, &requestCount){
 		}
 		struct pdu *received = (struct pdu *)pduBuff;
 		if(received->flag == FLAG_FILE_RES){
-			if(received.payload){//received file Ack
+			if(received->payload){//received file Ack
 				return IN_ORDER;
 			} else { //received file Nack
 				printf("Error: file %s not found", from_filename);
 				return END;
 			}
-		} else{
-			safeSendTo(socketNum, filePDU, payloadLen + HEADER_LEN, 0, serverAddress, addressLen); //resend file request packet
-			count++; //increment count of resends
-			if(count == 10) printf("Server Closed\n"); return END;
 		}
 	}
 	if (*requestCount == 10) printf("Server Closed\n"); return END;
 	return SETUP_REQ;
 }
 
-STATE receiveData(int socketNum, struct sockaddr* serverAddress, int *toFD, int buffSize, int *expectedSeqNum, int *highestSeqNum, int *sequenceNum){
+STATE receiveData(int socketNum, struct sockaddr* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen){
 	int timerExpired = timer();
 	if(timerExpired) return END;
-	uint8_t *PDU[buffSize + HEADER_LEN];
-	int pduLen = safeRecvFrom(socketNum, PDU, buffSize + HEADER_LEN, 0, serverAddress, sizeof(serverAddress));
+	uint8_t PDU[buffSize + HEADER_LEN];
+	int pduLen = safeRecvfrom(socketNum, PDU, buffSize + HEADER_LEN, 0, serverAddress, addrLen);
 	struct pdu *received = (struct pdu *)PDU; //format into struct
 	uint32_t seqNumRecv = ntohl(received->sequenceNum);
 	if(received->flag == FLAG_EOF){
+		if (*expectedSeqNum == *highestSeqNum) {
+			return TEARDOWN;
+		} else {
+			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_SREJ);
+			return BUFFERING;
+		}
 		return TEARDOWN;
-	} else if(in_cksum((uint16_t *) pduBuf, bytesRecv) == 0){
+	} else if(in_cksum((uint16_t *) PDU, pduLen) == 0){
 		if(seqNumRecv > *expectedSeqNum){
 			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_SREJ);
 			*highestSeqNum = seqNumRecv;
-			addVal(packetBuff, PDU, buffSize + HEADER_LEN, seqNumRecv);
+			addBuffVal(packetBuff, PDU, buffSize + HEADER_LEN, seqNumRecv);
 			return BUFFERING;
-		} else if(received.sequenceNum == expectedSeqNum){
-			write(*toFD, received.payload, pduLen - 7);
+		} else if(seqNumRecv == *expectedSeqNum){
+			write(toFD, received->payload, pduLen - 7);
 			*highestSeqNum = *expectedSeqNum;
 			(*expectedSeqNum)++;
 			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
-		} else if{ // received lower than expected
+		} else{ // received lower than expected
 			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 		}
 	}
 	return IN_ORDER;
 }
 
-STATE sendEOFack(int socketNum, uint32_t *sequenceNum, int toFD, struct sockaddr *serverAddress){
+STATE sendEOFack(int socketNum, uint32_t *sequenceNum, int toFD, struct sockaddr *serverAddress, int *addrLen){
 	uint8_t placeholder = 0;
-	uint8_t *EOFack = buildPDU(placeholder, 1, sequenceNum, FLAG_EOF_ACK);
-	safeSendTo(socketNum, EOFack, HEADER_LEN + 1, 0, serverAddress, sizeof(serverAddress));
+	uint8_t *EOFack = buildPDU((uint8_t *)&placeholder, 1, *sequenceNum, FLAG_EOF_ACK);
+	safeSendto(socketNum, EOFack, HEADER_LEN + 1, 0, serverAddress, sizeof(serverAddress));
 	(*sequenceNum)++;
 	if(timer()) printf("Server Closed after EOF\n"); return END;
-	safeRecvfrom(socketNum, EOFack, HEADER_LEN + 1, 0, serverAddress, sizeof(serverAddress));
-	if (EOFack[4] == FLAG_EOF_ACK) return DONE;
+	safeRecvfrom(socketNum, EOFack, HEADER_LEN + 1, 0, serverAddress, addrLen);
+	if (EOFack[4] == FLAG_EOF_ACK) return END;
 	return TEARDOWN;
 }
 
 void sendRRSREJ(int socketNum, struct sockaddr* serverAddress, uint32_t *sequenceNum, uint32_t *expected, int flag){
 	uint32_t expected_Net = htonl(*expected);
 	uint8_t RRSREJdata[4];
-	memcpy(RRSREJdata, &expected_Net, 4)
-	uint8_t *RRSREJ = buildPDU(expected_Net, 4, *sequenceNum, flag); //build filename PDU
-	safeSendTo(socketNum, RRSREJ, RRSREJ_LEN, 0, serverAddress, sizeof(serverAddress));
+	memcpy(RRSREJdata, &expected_Net, 4);
+	uint8_t *RRSREJ = buildPDU((uint8_t *)&expected_Net, 4, *sequenceNum, flag); //build filename PDU
+	safeSendto(socketNum, RRSREJ, RRSREJ_LEN, 0, serverAddress, sizeof(serverAddress));
 	(*sequenceNum)++;
 }
 
-STATE bufferData(int socketNum, serverAddress, toFD, buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum){
+STATE bufferData(int socketNum, struct sockaddr* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen){
 	int timerExpired = timer();
 	if(timerExpired) return END;
-	uint8_t *PDU[buffSize + HEADER_LEN];
-	int pduLen = safeRecvFrom(socketNum, PDU, buffSize + HEADER_LEN, 0, serverAddress, sizeof(serverAddress));
+	uint8_t PDU[buffSize + HEADER_LEN];
+	int pduLen = safeRecvfrom(socketNum, PDU, buffSize + HEADER_LEN, 0, serverAddress, addrLen);
 	struct pdu *received = (struct pdu *)PDU; //format into struct
 	uint32_t seqNumRecv = ntohl(received->sequenceNum);
 	if(in_cksum((uint16_t *) PDU, pduLen) == 0){
 		if(seqNumRecv > *expectedSeqNum){
 			*highestSeqNum = seqNumRecv;
-			addVal(packetBuff, PDU, buffSize + HEADER_LEN, seqNumRecv);
+			addBuffVal(packetBuff, PDU, buffSize + HEADER_LEN, seqNumRecv);
 		} else if(seqNumRecv == *expectedSeqNum){
-			write(*toFD, received.payload, pduLen - 7);
+			write(toFD, received->payload, pduLen - 7);
 			(*expectedSeqNum)++;
 			return FLUSHING;
 		} else{
@@ -219,22 +219,21 @@ STATE bufferData(int socketNum, serverAddress, toFD, buffSize, uint32_t *expecte
 	return BUFFERING;
 }
 
-STATE flushData(int socketNum, serverAddress, toFD, buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum){
+STATE flushData(int socketNum, struct sockaddr* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum){
 	while((*expectedSeqNum <= *highestSeqNum) && validityCheck(packetBuff, *expectedSeqNum)){
-		BufferVal flushVal = getVal(packetBuff, *expectedSeqNum);
-		write(toFD, flushVal->PDU + 7, packetBuff.dataLen);
-		(*expected)++;
+		BufferVal flushVal = getBuffVal(packetBuff, *expectedSeqNum);
+		write(toFD, flushVal.PDU + 7, flushVal.dataLen);
+		(*expectedSeqNum)++;
 		setInvalid(packetBuff, *expectedSeqNum);
 	}
 	if (*expectedSeqNum == *highestSeqNum) { //all caught up, back to in order
-		sendRRSREJ(socketNum, ServerAddress, sequenceNum, expectedSeqNum, FLAG_RR);
-		nextState = IN_ORDER;
+		sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
+		return IN_ORDER;
 	} else {
-		sendRRSREJ(socketNum, ServerAddress, sequenceNum, expectedSeqNum, FLAG_RR);
-		sendRRSREJ(socketNum, ServerAddress, sequenceNum, expectedSeqNum, FLAG_SREJ);
+		sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
+		sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_SREJ);
 	}
-	return BUFFERING
-	
+	return BUFFERING;
 }
 
 int timer(){

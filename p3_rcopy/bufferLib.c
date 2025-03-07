@@ -5,32 +5,34 @@
 #include "bufferLib.h"
 
 /* handle table control functions */
-CircularBuff createBuffer(uint32_t bufferLen, uint32_t valueLength){
-    CircularBuff circularBuff;
-    circularBuff.bufferLen = bufferLen;
-    circularBuff.valueLen = valueLength;
-    circularBuff.buffer = (BufferVal *)malloc(sizeof(BufferVal) * bufferLen);
-    if (!circularBuff.buffer) {
+CircularBuff *createBuffer(uint32_t bufferLen, uint32_t valueLength){
+    uint32_t i;
+    CircularBuff *circularBuff = malloc(sizeof(CircularBuff));
+    circularBuff->bufferLen = bufferLen;
+    circularBuff->valueLen = valueLength;
+    circularBuff->buffer = (BufferVal *)malloc(sizeof(BufferVal) * bufferLen);
+    if (!circularBuff->buffer) {
         printf("Buffer allocation failed\n");
         exit(-1);
     }
-    for(uint32_t i = 0; i < circularBuff.bufferLen; i++){
-        circularBuff.buffer[i].dataLen = 0;
-        circularBuff.buffer[i].sequenceNum = 0;
-        circularBuff.buffer[i].validFlag = 0;
-        circularBuff.buffer[i].PDU = NULL;
+    for(i = 0; i < circularBuff->bufferLen; i++){
+        circularBuff->buffer[i].dataLen = 0;
+        circularBuff->buffer[i].sequenceNum = 0;
+        circularBuff->buffer[i].validFlag = 0;
+        circularBuff->buffer[i].PDU = NULL;
     }
     return circularBuff;
 }
 
 void destroyBuffer(CircularBuff *buffer){
-    for(uint32_t i = 0; i < buffer->bufferLen; i++){
+    uint32_t i;
+    for(i = 0; i < buffer->bufferLen; i++){
         if(buffer->buffer[i].PDU != NULL) free(buffer->buffer[i].PDU);
     }
     free(buffer->buffer);
 }
 
-void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum){
+void addBuffVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum){
     if(!buffer || !buffer->buffer) return;
     uint32_t index = sequenceNum % buffer->bufferLen;
     if(buffer->buffer[index].PDU != NULL){
@@ -46,7 +48,7 @@ void addVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t sequen
     memcpy(buffer->buffer[index].PDU, PDU, PDUlen);
 }
 
-BufferVal getVal(CircularBuff *buffer, uint32_t sequenceNum){
+BufferVal getBuffVal(CircularBuff *buffer, uint32_t sequenceNum){
     if(!buffer || !buffer->buffer){
         printf("Invalid buffer");
         exit(-1);

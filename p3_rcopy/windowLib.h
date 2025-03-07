@@ -29,10 +29,10 @@ typedef struct WindowBuff{
 } WindowBuff;
 
 /* handle table control functions */
-WindowBuff createWindow(uint32_t windowLength, uint32_t valueLength);
+WindowBuff *createWindow(uint32_t windowLength, uint32_t valueLength);
 void destroyWindow(WindowBuff *window);
-void addVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum);
-WindowVal getVal(WindowBuff *window, uint32_t sequenceNum);
+void addWinVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t sequenceNum);
+WindowVal getWinVal(WindowBuff *window, uint32_t sequenceNum);
 void slideWindow(WindowBuff *window, uint32_t newLower);
 int windowCheck(WindowBuff *window);
 

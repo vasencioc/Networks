@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/time.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -17,9 +19,12 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+#include "pollLib.h"
 #include "gethostbyname.h"
+#include "checksum.h"
 #include "networks.h"
 #include "safeUtil.h"
+#include "cpe464.h"
 
 #ifndef __PDU_H__
 #define __PDU_H__
