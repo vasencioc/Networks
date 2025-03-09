@@ -194,7 +194,7 @@ int setupUdpClientToServer(struct sockaddr_in6 *serverAddress, char * hostName, 
 	}
   	 	
 	memset(serverAddress, 0, sizeof(struct sockaddr_in6));
-	serverAddress->sin6_port = ntohs(serverPort);
+	serverAddress->sin6_port = htons(serverPort);
 	serverAddress->sin6_family = AF_INET6;	
 	
 	if ((ipAddress = gethostbyname6(hostName, serverAddress)) == NULL)
