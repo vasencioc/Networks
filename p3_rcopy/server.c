@@ -170,13 +170,16 @@ STATE sendEOF(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen, 
 }
 
 STATE sendData(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen, uint32_t *sequenceNum, int fromFD, uint16_t bufferLen){
+	printf("getting here\n");
 	int reachedEnd = 0; //flag for end of file
 	uint32_t count;
 	uint32_t trackSeqNum = 0;
 	uint32_t lastSeqNum = 0;
 	uint8_t buffer[bufferLen];
 	while(!reachedEnd){
+		printf("big loop\n");
 		while(!windowCheck(window)){ //window open
+			printf("before read\n");
 			int lenRead = read(fromFD, buffer, bufferLen); //read data
 			if(lenRead == 0){
 				lastSeqNum = *sequenceNum;
@@ -186,12 +189,15 @@ STATE sendData(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen,
 			uint8_t *pdu = buildPDU(buffer, bufferLen, *sequenceNum, FLAG_DATA); //create PDU
 			addWinVal(window, pdu, lenRead + 7, *sequenceNum); //store PDU
 			safeSendto(socketNum, pdu, lenRead + 7, 0, (struct sockaddr *)clientAddress, clientLen); //send data
+			(*sequenceNum)++;
 			while(pollCall(0)){
 				processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
+				printf("after RR\n");
 			}
 		}
 		count = 0;
 		while(windowCheck(window)){ //window closed
+			printf("window closed?\n");
 			if(pollCall(1000)){
 				processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
 			} else{
@@ -211,6 +217,7 @@ STATE sendData(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen,
 	}
 	count = 0;//reset count 
 	while(trackSeqNum != lastSeqNum){
+		printf("is it this?\n");
 		if(pollCall(1000)){
 			processRRSREJ(socketNum, clientAddress, clientLen, &trackSeqNum);
 		} else if(count == 10){

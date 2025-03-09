@@ -47,6 +47,7 @@ void addWinVal(WindowBuff *window, uint8_t *PDU, uint32_t PDUlen, uint32_t seque
         exit(-1);
     }
     memcpy(window->buffer[index].PDU, PDU, PDUlen);
+    window->current++;
 }
 
 WindowVal getWinVal(WindowBuff *window, uint32_t sequenceNum){
@@ -59,16 +60,18 @@ WindowVal getWinVal(WindowBuff *window, uint32_t sequenceNum){
 }
 
 void slideWindow(WindowBuff *window, uint32_t newLower){
-    if(!window || !window->buffer) return;
-    while(window->lower <= newLower){
-        uint32_t index = window->lower % window->windowLen;
-        free(window->buffer[index].PDU);
-        window->buffer[index].PDU = NULL;
-        window->buffer[index].dataLen = 0;
-        window->buffer[index].sequenceNum = 0;
-        window->lower++;
-    }
-    window->upper = window->lower + window->windowLen - 1;
+    // if(!window || !window->buffer) return;
+    // while(window->lower <= newLower){
+    //     uint32_t index = window->lower % window->windowLen;
+    //     free(window->buffer[index].PDU);
+    //     window->buffer[index].PDU = NULL;
+    //     window->buffer[index].dataLen = 0;
+    //     window->buffer[index].sequenceNum = 0;
+    //     window->lower++;
+    // }
+    // window->upper = window->lower + window->windowLen - 1;
+    window->lower = newLower;
+    window->upper = window->lower + window->windowLen;
 }
 
 int windowCheck(WindowBuff *window){

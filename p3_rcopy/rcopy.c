@@ -74,7 +74,7 @@ void clientControl(char *fromFile, int toFD, uint32_t windowSize, uint16_t buffS
 	// setup variables for sending data
 	packetBuff = createBuffer(windowSize, buffSize);
 	uint32_t sequenceNum = 0;
-	uint32_t expected = 0;
+	uint32_t expected = 1;
 	uint32_t highest = 0;
 	uint32_t requestCount = 0;
 	int serverLen = sizeof(struct sockaddr_in6);
@@ -145,7 +145,9 @@ STATE transferReply(int socketNum, struct sockaddr_in6 *server, uint32_t *reques
 }
 
 STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen){
+	printf("getting here\n");
 	int timerExpired = timer();
+	//printf("getting here 2\n");
 	if(timerExpired) return END;
 	uint8_t PDU[buffSize + HEADER_LEN];
 	int pduLen = safeRecvfrom(socketNum, PDU, buffSize + HEADER_LEN, 0, (struct sockaddr *)serverAddress, addrLen);
@@ -166,9 +168,9 @@ STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, u
 			return BUFFERING;
 		} else if(seqNumRecv == *expectedSeqNum){
 			write(toFD, received->payload, pduLen - 7);
+			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 			*highestSeqNum = *expectedSeqNum;
 			(*expectedSeqNum)++;
-			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 		} else{ // received lower than expected
 			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 		}
