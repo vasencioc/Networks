@@ -243,7 +243,7 @@ void processRRSREJ(int socketNum, struct sockaddr_in6 *clientAddress, int client
 		uint32_t seqNumResponse;
 		memcpy(&seqNumResponse, received->payload + 7, 4);
 		if(received->flag == FLAG_RR){
-			*RRnum= ntohl(seqNumResponse);
+			*RRnum = ntohl(seqNumResponse);
 			slideWindow(window, *RRnum);
 		} else if(received->flag == FLAG_SREJ){
 			//resend rejected pdu
