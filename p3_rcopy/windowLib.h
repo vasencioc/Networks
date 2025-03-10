@@ -10,6 +10,7 @@
 #include <stdlib.h> 
 #include <string.h>
 #include <stdio.h>
+#include "PDU.h" //for macros
 
 /* WindowVal: Represents one entry in the window buffer*/
 typedef struct WindowVal{

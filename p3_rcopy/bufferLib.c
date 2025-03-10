@@ -10,16 +10,13 @@ CircularBuff *createBuffer(uint32_t bufferLen, uint32_t valueLength){
     CircularBuff *circularBuff = malloc(sizeof(CircularBuff));
     circularBuff->bufferLen = bufferLen;
     circularBuff->valueLen = valueLength;
-    circularBuff->buffer = (BufferVal *)malloc(sizeof(BufferVal) * bufferLen);
-    if (!circularBuff->buffer) {
-        printf("Buffer allocation failed\n");
-        exit(-1);
-    }
+    circularBuff->buffer = malloc(sizeof(BufferVal) * bufferLen);
     for(i = 0; i < circularBuff->bufferLen; i++){
+        circularBuff->buffer[i].PDU = malloc(HEADER_LEN + bufferLen);
+        memset(circularBuff->buffer[i].PDU, '\0', HEADER_LEN + bufferLen);
         circularBuff->buffer[i].dataLen = 0;
         circularBuff->buffer[i].sequenceNum = 0;
         circularBuff->buffer[i].validFlag = 0;
-        circularBuff->buffer[i].PDU = NULL;
     }
     return circularBuff;
 }
@@ -40,6 +37,7 @@ void addBuffVal(CircularBuff *buffer, uint8_t *PDU, uint32_t PDUlen, uint32_t se
     }
     buffer->buffer[index].dataLen = PDUlen - 7;
     buffer->buffer[index].sequenceNum = sequenceNum;
+    buffer->buffer[index].validFlag = 1;
     buffer->buffer[index].PDU = (uint8_t *)malloc(sizeof(uint8_t) * PDUlen);
     if (!buffer->buffer) {
         printf("Buffer value allocation failed\n");

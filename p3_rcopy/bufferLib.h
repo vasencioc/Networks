@@ -10,6 +10,7 @@
 #include <stdlib.h> 
 #include <string.h>
 #include <stdio.h>
+#include "PDU.h" //for macros
 
 /* BufferVal: Represents one entry in the circular queue buffer*/
 typedef struct BufferVal{

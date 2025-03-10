@@ -105,20 +105,25 @@ STATE transferRequest(int socketNum, uint32_t windowSize, uint32_t bufferSize, c
 	int addressLen = sizeof(struct sockaddr_in6);
 	uint32_t dataLen = strlen(from_filename) + 7; //add space for null term, buffer and window length
 	uint8_t data[dataLen];
-	memcpy(data, &windowSize, 4);
-	memcpy(data + 4, &bufferSize, 2);
+	uint32_t windowSizeNet = htonl(windowSize);
+	uint16_t bufferSizeNet = htons(bufferSize);
+	memcpy(data, &windowSizeNet, 4);
+	memcpy(data + 4, &bufferSizeNet, 2);
 	memcpy(data + 6, from_filename, strlen(from_filename) + 1);
 	//data[dataLen] = '\0';
 	uint8_t *filePDU = buildPDU(data, dataLen, 0, FLAG_FILE_REQ); //build filename PDU
 	safeSendto(socketNum, filePDU, dataLen + HEADER_LEN, 0, (struct sockaddr *)serverAddress, addressLen);
 	(*reqCount)++;
+	(*seqNum)++;
 	return SETUP_REPLY;
 }
 
 STATE transferReply(int socketNum, struct sockaddr_in6 *server, uint32_t *requestCount, uint32_t *seqNum, char *from_filename, int *addrLen){
-	if(pollCall(1000)){
+	int sock = 0;
+	if ((sock = pollCall(1000)) > 0){
 		uint8_t pduBuff[MAX_PDU];
-		int pduLen = safeRecvfrom(socketNum, pduBuff, MAX_PDU, 0, (struct sockaddr *)server, addrLen);
+		memset(pduBuff, 0, MAX_PDU + HEADER_LEN);
+		int pduLen = safeRecvfrom(sock, pduBuff, MAX_PDU, 0, (struct sockaddr *)server, addrLen);
 		if (in_cksum((uint16_t *) pduBuff, pduLen) != 0) {
 			(*seqNum)++;
 			(*requestCount)--;
@@ -145,11 +150,12 @@ STATE transferReply(int socketNum, struct sockaddr_in6 *server, uint32_t *reques
 }
 
 STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen){
-	printf("getting here\n");
+
 	int timerExpired = timer();
 	//printf("getting here 2\n");
 	if(timerExpired) return END;
 	uint8_t PDU[buffSize + HEADER_LEN];
+	memset(PDU, 0, buffSize + HEADER_LEN);
 	int pduLen = safeRecvfrom(socketNum, PDU, buffSize + HEADER_LEN, 0, (struct sockaddr *)serverAddress, addrLen);
 	struct pdu *received = (struct pdu *)PDU; //format into struct
 	uint32_t seqNumRecv = ntohl(received->sequenceNum);
@@ -202,6 +208,7 @@ STATE bufferData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, ui
 	int timerExpired = timer();
 	if(timerExpired) return END;
 	uint8_t PDU[buffSize + HEADER_LEN];
+	memset(PDU, 0, buffSize + HEADER_LEN);
 	int pduLen = safeRecvfrom(socketNum, PDU, buffSize + HEADER_LEN, 0, (struct sockaddr *)serverAddress, addrLen);
 	struct pdu *received = (struct pdu *)PDU; //format into struct
 	uint32_t seqNumRecv = ntohl(received->sequenceNum);
