@@ -152,7 +152,6 @@ STATE transferReply(int socketNum, struct sockaddr_in6 *server, uint32_t *reques
 STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestSeqNum, uint32_t *sequenceNum, int *addrLen){
 
 	int timerExpired = timer();
-	//printf("getting here 2\n");
 	if(timerExpired) return END;
 	uint8_t PDU[buffSize + HEADER_LEN];
 	memset(PDU, 0, buffSize + HEADER_LEN);
@@ -160,12 +159,7 @@ STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, u
 	struct pdu *received = (struct pdu *)PDU; //format into struct
 	uint32_t seqNumRecv = ntohl(received->sequenceNum);
 	if(received->flag == FLAG_EOF){
-		if (*expectedSeqNum == *highestSeqNum) {
 			return TEARDOWN;
-		} else {
-			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_SREJ);
-			return BUFFERING;
-		}
 	} else if(in_cksum((uint16_t *) PDU, pduLen) == 0){
 		if(seqNumRecv > *expectedSeqNum){
 			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_SREJ);
@@ -174,9 +168,9 @@ STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, u
 			return BUFFERING;
 		} else if(seqNumRecv == *expectedSeqNum){
 			write(toFD, received->payload, pduLen - 7);
-			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 			*highestSeqNum = *expectedSeqNum;
 			(*expectedSeqNum)++;
+			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 		} else{ // received lower than expected
 			sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);
 		}

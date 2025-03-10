@@ -181,17 +181,19 @@ STATE sendData(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen,
 	uint32_t trackSeqNum = 0;
 	uint32_t lastSeqNum = 0;
 	uint8_t buffer[bufferLen];
+	memset(buffer, 0, bufferLen + HEADER_LEN);
 	while(!reachedEnd){
 		while(!windowCheck(window)){ //window open
 			int lenRead = read(fromFD, buffer, bufferLen); //read data
 			if(lenRead == 0){
-				lastSeqNum = *sequenceNum;
-				reachedEnd = 1;
-				break;
+				// lastSeqNum = *sequenceNum;
+				// reachedEnd = 1;
+				// break;
+				return TEARDOWN;
 			}
-			uint8_t *pdu = buildPDU(buffer, bufferLen, *sequenceNum, FLAG_DATA); //create PDU
-			addWinVal(window, pdu, lenRead + 7, *sequenceNum); //store PDU
-			safeSendto(socketNum, pdu, lenRead + 7, 0, (struct sockaddr *)clientAddress, clientLen); //send data
+			uint8_t *pdu = buildPDU(buffer, lenRead, *sequenceNum, FLAG_DATA); //create PDU
+			addWinVal(window, pdu, lenRead + HEADER_LEN, *sequenceNum); //store PDU
+			safeSendto(socketNum, pdu, lenRead + HEADER_LEN, 0, (struct sockaddr *)clientAddress, clientLen); //send data
 			(*sequenceNum)++;
 			int sock = 0;
 			while ((sock = pollCall(0)) > 0){
@@ -206,9 +208,9 @@ STATE sendData(int socketNum, struct sockaddr_in6 *clientAddress, int clientLen,
 			} else{
 				//resend lowest packet
 				WindowVal lowest = getWinVal(window, window->lower);
-				uint8_t resend[lowest.dataLen + 7];
-				memcpy(resend, lowest.PDU, lowest.dataLen + 7);
-				safeSendto(socketNum, resend, lowest.dataLen + 7, 0, (struct sockaddr *)clientAddress, clientLen);
+				uint8_t resend[lowest.dataLen + HEADER_LEN];
+				memcpy(resend, lowest.PDU, lowest.dataLen + HEADER_LEN);
+				safeSendto(socketNum, resend, lowest.dataLen + HEADER_LEN, 0, (struct sockaddr *)clientAddress, clientLen);
 				//increment count of resends
 				count++;
 				if(count == 10){
