@@ -5,15 +5,15 @@
 #include "bufferLib.h"
 
 /* handle table control functions */
-CircularBuff *createBuffer(uint32_t bufferLen, uint32_t valueLength){
+CircularBuff *createBuffer(uint32_t bufferLen, uint32_t valueLen){
     uint32_t i;
     CircularBuff *circularBuff = malloc(sizeof(CircularBuff));
     circularBuff->bufferLen = bufferLen;
-    circularBuff->valueLen = valueLength;
+    circularBuff->valueLen = valueLen;
     circularBuff->buffer = malloc(sizeof(BufferVal) * bufferLen);
-    for(i = 0; i < circularBuff->bufferLen; i++){
-        circularBuff->buffer[i].PDU = malloc(HEADER_LEN + bufferLen);
-        memset(circularBuff->buffer[i].PDU, '\0', HEADER_LEN + bufferLen);
+    for(i = 0; i < bufferLen; i++){
+        circularBuff->buffer[i].PDU = malloc(HEADER_LEN + valueLen);
+        memset(circularBuff->buffer[i].PDU, '\0', HEADER_LEN + valueLen);
         circularBuff->buffer[i].dataLen = 0;
         circularBuff->buffer[i].sequenceNum = 0;
         circularBuff->buffer[i].validFlag = 0;

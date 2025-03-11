@@ -1,4 +1,6 @@
 Victoria Asencio-Clemens, Lab Section: 3pm-6pm
 
-I added a flag for the end of file acknowledgement sent from rcopy (receiver) to the server (sender), with value of 3.
+I added a flag for the end of file acknowledgement sent from rcopy (receiver) to the server (sender), with value of 33.
     Flag = 33 Packet is the EOF responce/acknowledgement (receiver to sender)
+I added a flag for the filename response acknowledgement sent from rcopy (receiver) to the server (sender), with value of 34.
+    Flag = 34 Packet is the file FNAME response ACK responce (receiver to sender)

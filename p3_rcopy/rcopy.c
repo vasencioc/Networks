@@ -45,6 +45,7 @@ int main (int argc, char *argv[])
 	sendtoErr_init(atof(argv[5]), DROP_ON, FLIP_ON, DEBUG_ON, RSEED_ON); //for corrupt packet testing
 	socketNum = setupUdpClientToServer(&server, argv[6], portNumber); 
 	int toFD = checkConfig(socketNum, argv[1], argv[2], atoi(argv[3]), atoi(argv[4])); //check command line argument values
+	
 	if(toFD < 0){ //can't open file, should never happen
 		printf("Error on open of output file: %s\n", argv[2]);
 	} else { //download control flow
@@ -61,7 +62,7 @@ int checkConfig(int socketNum, char * fromFile, char * toFile, uint32_t windowSi
 		printf("Filename is too long: %s\n", fromFile);
 		close(socketNum);
 		exit(-1);
-	} else if((windowSize > MAX_WINDOW) || (windowSize <= 0)){ //check window size
+	} else if((windowSize >= pow(2, 30)) || (windowSize <= 0)){ //check window size
 		printf("Invalid window size\n");
 		close(socketNum);
 		exit(-1);
@@ -155,6 +156,7 @@ STATE transferReply(int socketNum, struct sockaddr_in6 *server, uint32_t *reques
 
 /* In-Order State */
 STATE receiveData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestRRSREJ, uint32_t *sequenceNum, int *addrLen){
+	printf("in-order\n");
 	int timerExpired = timer(); 
 	if(timerExpired) return END; //server is unresponsive
 
@@ -207,6 +209,7 @@ void sendRRSREJ(int socketNum, struct sockaddr_in6* serverAddress, uint32_t *seq
 
 /* Buffer State*/
 STATE bufferData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestRRSREJ, uint32_t *sequenceNum, int *addrLen){
+	printf("buffering\n");
 	int timerExpired = timer();
 	if(timerExpired) return END; //server unresponsive
 
@@ -231,11 +234,12 @@ STATE bufferData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, ui
 
 /* Flushing Sate */
 STATE flushData(int socketNum, struct sockaddr_in6* serverAddress, int toFD, uint16_t buffSize, uint32_t *expectedSeqNum, uint32_t *highestRRSREJ, uint32_t *sequenceNum){
-	while((*expectedSeqNum <= *highestRRSREJ) && validityCheck(packetBuff, *expectedSeqNum)){ //flush all valid data in buffer
+	printf("flushing\n");
+	while((*expectedSeqNum < *highestRRSREJ) && validityCheck(packetBuff, *expectedSeqNum)){ //flush all valid data in buffer
 		BufferVal flushVal = getBuffVal(packetBuff, *expectedSeqNum);
 		write(toFD, flushVal.PDU + HEADER_LEN, flushVal.dataLen); //write to output file
-		(*expectedSeqNum)++;
 		setInvalid(packetBuff, *expectedSeqNum); //clear buffer
+		(*expectedSeqNum)++;
 	}
 	if (*expectedSeqNum == *highestRRSREJ) { //buffer empty
 		sendRRSREJ(socketNum, serverAddress, sequenceNum, expectedSeqNum, FLAG_RR);

@@ -18,6 +18,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <math.h>
 
 #include "pollLib.h"
 #include "gethostbyname.h"
@@ -33,12 +34,13 @@
 #define HEADER_LEN 7
 #define MAX_PAYLOAD 1400
 #define MAX_PDU 1407
-#define MAX_WINDOW 1073741823
+#define MAX_WINDOW (pow(2, 30) - 1)
 #define RRSREJ_LEN 11
 #define FLAG_RR 5
 #define FLAG_SREJ 6
 #define FLAG_FILE_REQ 8
 #define FLAG_FILE_RES 9
+#define FLAG_FILE_RES_ACK 34
 #define FLAG_EOF 10
 #define FLAG_EOF_ACK 33
 #define FLAG_DATA 16
