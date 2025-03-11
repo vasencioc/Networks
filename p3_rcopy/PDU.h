@@ -40,7 +40,6 @@
 #define FLAG_SREJ 6
 #define FLAG_FILE_REQ 8
 #define FLAG_FILE_RES 9
-#define FLAG_FILE_RES_ACK 34
 #define FLAG_EOF 10
 #define FLAG_EOF_ACK 33
 #define FLAG_DATA 16
